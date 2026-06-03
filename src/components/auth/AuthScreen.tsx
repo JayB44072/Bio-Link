@@ -84,7 +84,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 bg-blue-600/10 border border-blue-600/20 rounded-full px-4 py-1.5 mb-6">
               <Zap size={12} className="text-blue-400" />
-              <span className="text-blue-400 text-xs font-medium">SaaS Micro-Boutiques</span>
+              <span className="text-blue-400 text-xs font-medium">WhiteDukeSaaS Micro-Boutiques</span>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">{t.welcome}</h1>
             <p className="text-gray-400 text-sm">{t.tagline}</p>
@@ -139,7 +139,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                       value={displayName}
                       onChange={e => setDisplayName(e.target.value)}
                       required
-                      placeholder="Jean Dupont"
+                      placeholder="Nom"
                       className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
                     />
                   </div>
@@ -152,7 +152,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                         value={username}
                         onChange={e => setUsername(sanitizeUsername(e.target.value))}
                         required
-                        placeholder="jeandupont"
+                        placeholder="nom d'utilisateur"
                         className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-8 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
                       />
                     </div>
@@ -210,5 +210,5 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         </div>
       </div>
     </div>
-  );
+  );  
 }

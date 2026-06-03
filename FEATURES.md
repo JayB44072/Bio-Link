@@ -158,7 +158,7 @@ Composant de prévisualisation bureau :
 **Page publique (/u/:username) :**
 - Affiche le thème sélectionné avec arrière-plan
 - Responsive mobile/desktop automatique
-- Badge "Propulsé par WhiteDuckSaas" visible uniquement si plan Gratuit
+- Badge "Propulsé par WhiteDukeSaas" visible uniquement si plan Gratuit
 - Si plan Premium : page marque blanche sans badge
 
 ---
@@ -196,7 +196,7 @@ Composant de prévisualisation bureau :
 5. ✓ Vérifier les formes en arrière-plan sur chaque thème (web et mobile)
 6. ✓ Ajouter liens sociaux → visibles en aperçu temps réel
 7. ✓ Visiter la page publique → thème appliqué avec backgrounds
-8. ✓ Sur plan Gratuit → badge "Propulsé par WhiteDuckSaas"
+8. ✓ Sur plan Gratuit → badge "Propulsé par WhiteDukeSaas"
 9. ✓ Sur plan Premium → pas de badge, page marque blanche
 
 ---

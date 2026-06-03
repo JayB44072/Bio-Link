@@ -85,7 +85,7 @@ export default function MobilePreview({ profile, productCount }: MobilePreviewPr
 
             {/* Badge placeholder */}
             <div className="mt-4 text-center">
-              <span className={`text-[9px] opacity-40 ${theme.text}`}>Propulsé par WhiteDuckSaas</span>
+              <span className={`text-[9px] opacity-40 ${theme.text}`}>Propulsé par WhiteDukeSaas</span>
             </div>
           </div>
         </div>
