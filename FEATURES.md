@@ -161,7 +161,7 @@ Composant de prévisualisation bureau :
 <<<<<<< HEAD
 - Badge "Propulsé par WhiteDukeSaas" visible uniquement si plan Gratuit
 =======
-- Badge "Propulsé par WhiteDuckSaas" visible uniquement si plan Gratuit
+
 >>>>>>> origin/main
 - Si plan Premium : page marque blanche sans badge
 
@@ -203,7 +203,7 @@ Composant de prévisualisation bureau :
 <<<<<<< HEAD
 8. ✓ Sur plan Gratuit → badge "Propulsé par WhiteDukeSaas"
 =======
-8. ✓ Sur plan Gratuit → badge "Propulsé par WhiteDuckSaas"
+8. ✓ Sur plan Gratuit → badge "Propulsé par kSaas"
 >>>>>>> origin/main
 9. ✓ Sur plan Premium → pas de badge, page marque blanche
 

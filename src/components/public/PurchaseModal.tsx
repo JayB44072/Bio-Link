@@ -372,7 +372,7 @@ export default function PurchaseModal({ product, seller, onClose }: PurchaseModa
                 <label className="block text-gray-700 text-xs font-bold mb-1.5">{lang === 'fr' ? 'Votre Nom Complet *' : `${t.buyerName} *`}</label>
                 <input
                   type="text" value={name} onChange={e => setName(e.target.value)} required
-                  placeholder="Ex: Jean Dupont"
+                  placeholder="Ex: nom "
                   className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-950 text-sm focus:outline-none focus:border-gray-950 focus:ring-1 focus:ring-gray-950/20 transition-all font-medium"
                 />
               </div>
