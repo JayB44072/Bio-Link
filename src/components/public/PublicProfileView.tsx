@@ -324,13 +324,8 @@ export default function PublicProfileView({ profile, products, services, interac
       {/* ══ Header façon marketplace ══ */}
       <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${headerBg}`}>
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-2.5">
-          {/* Hamburger — mobile uniquement */}
-          <button onClick={() => setMenuOpen(true)}
-            className={`${forceDesktop ? 'hidden' : forceMobile ? 'flex' : 'flex md:hidden'} shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
-            <Menu size={16} className={dk ? 'text-[#f2f1ff]' : 'text-gray-700'} />
-          </button>
 
-          {/* Logo + nom */}
+          {/* Logo + nom — toujours à gauche */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center shrink-0 ${dk ? 'bg-[rgba(139,124,255,0.12)]' : 'bg-gray-100'}`}>
               {profile.shop_logo_url ? (
@@ -387,47 +382,53 @@ export default function PublicProfileView({ profile, products, services, interac
             </div>
           )}
 
-          {/* Mode clair / sombre */}
-          <button onClick={toggleDark}
-            className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition"
-            style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }}>
-            {dk ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-
-          {/* Langue — même dropdown que la page d'accueil */}
-          <div className="relative shrink-0" ref={langRef}>
-            <button onClick={() => setLangOpen(v => !v)}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-colors"
-              style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#c7c5e8' : '#6b7280' }}>
-              <Globe size={12} />{lang.toUpperCase()}
+          {/* Desktop : mode clair/sombre + langue + panier */}
+          <div className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} items-center gap-1.5`}>
+            <button onClick={toggleDark}
+              className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition"
+              style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }}>
+              {dk ? <Sun size={15} /> : <Moon size={15} />}
             </button>
-            {langOpen && (
-              <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
-                style={{ background: dk ? '#111128' : '#fff', borderColor: dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb' }}>
-                {LANG_OPTIONS.map(({ code, label }) => (
-                  <button key={code} onClick={() => { setLang(code); setLangOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
-                    style={{
-                      color: lang === code ? '#6C63FF' : (dk ? '#c0c0e0' : '#374151'),
-                      background: lang === code ? (dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff') : 'transparent',
-                    }}>
-                    {label}
-                    {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="relative shrink-0" ref={langRef}>
+              <button onClick={() => setLangOpen(v => !v)}
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-colors"
+                style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#c7c5e8' : '#6b7280' }}>
+                <Globe size={12} />{lang.toUpperCase()}
+              </button>
+              {langOpen && (
+                <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
+                  style={{ background: dk ? '#111128' : '#fff', borderColor: dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb' }}>
+                  {LANG_OPTIONS.map(({ code, label }) => (
+                    <button key={code} onClick={() => { setLang(code); setLangOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
+                      style={{
+                        color: lang === code ? '#6C63FF' : (dk ? '#c0c0e0' : '#374151'),
+                        background: lang === code ? (dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff') : 'transparent',
+                      }}>
+                      {label}
+                      {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Panier */}
+          {/* Panier — desktop uniquement (sur mobile il est dans le hamburger) */}
           <button onClick={() => interactive && setCartOpen(true)}
-            className={`relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
+            className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
             <ShoppingCart size={15} className={dk ? 'text-[#f2f1ff]' : 'text-gray-700'} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-pink-600 text-white text-[9px] font-black flex items-center justify-center">
                 {cartCount}
               </span>
             )}
+          </button>
+
+          {/* Hamburger — mobile uniquement, à l'extrême droite */}
+          <button onClick={() => setMenuOpen(true)}
+            className={`${forceDesktop ? 'hidden' : forceMobile ? 'flex' : 'flex md:hidden'} shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
+            <Menu size={16} className={dk ? 'text-[#f2f1ff]' : 'text-gray-700'} />
           </button>
         </div>
       </header>
@@ -464,6 +465,51 @@ export default function PublicProfileView({ profile, products, services, interac
               <PackageSearch size={16} />
               {lang === 'fr' ? 'Suivi de commande' : 'Track my order'}
             </button>
+
+            {/* Séparateur */}
+            <div className="my-2 border-t" style={{ borderColor: dk ? 'rgba(139,124,255,0.12)' : '#f3f4f6' }} />
+
+            {/* Panier */}
+            <button onClick={() => { interactive && setCartOpen(true); setMenuOpen(false); }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
+              style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+              <ShoppingCart size={16} />
+              {lang === 'fr' ? 'Panier' : 'Cart'}
+              {cartCount > 0 && (
+                <span className="ml-auto min-w-[20px] h-[20px] px-1.5 rounded-full bg-pink-600 text-white text-[10px] font-black flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
+            {/* Mode clair/sombre */}
+            <button onClick={toggleDark}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
+              style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+              {dk ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} />}
+              {dk ? (lang === 'fr' ? 'Mode clair' : 'Light mode') : (lang === 'fr' ? 'Mode sombre' : 'Dark mode')}
+            </button>
+
+            {/* Langue — sélecteur compact */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <Globe size={16} style={{ color: dk ? '#8c8ab0' : '#4b5563' }} className="shrink-0" />
+              <span className="text-sm font-bold" style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+                {lang === 'fr' ? 'Langue' : 'Language'}
+              </span>
+              <select
+                value={lang}
+                onChange={e => setLang(e.target.value as LandingLang)}
+                className="ml-auto text-sm font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                style={{
+                  background: dk ? 'rgba(139,124,255,0.12)' : '#f5f3ff',
+                  color: dk ? '#c7c5e8' : '#6C63FF',
+                  border: `1px solid ${dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb'}`,
+                }}>
+                {LANG_OPTIONS.map(({ code, label }) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+            </div>
           </nav>
         </div>
       </div>
@@ -483,12 +529,6 @@ export default function PublicProfileView({ profile, products, services, interac
         </div>
       ) : (
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 pt-6 pb-20 relative z-10">
-
-        {profile.bio && (
-          <p className={`text-sm ${subtextClass} font-medium leading-relaxed mb-6 max-w-xl`}>
-            {profile.bio}
-          </p>
-        )}
 
         {/* Liens sociaux — état vide */}
         {currentTab === 'links' && socials.length === 0 && (
@@ -539,7 +579,7 @@ export default function PublicProfileView({ profile, products, services, interac
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredProducts.map((product, i) => (
               <div key={product.id}
-                className={`group flex flex-col border rounded-3xl overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5 ${cardBg}`}>
+                className={`group flex flex-col border rounded-xl overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5 ${cardBg}`}>
                 <button
                   onClick={() => setViewingProductId(product.id)}
                   className="aspect-square overflow-hidden bg-gray-900 relative w-full text-left">

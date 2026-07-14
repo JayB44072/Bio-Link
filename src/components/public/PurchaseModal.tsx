@@ -111,7 +111,6 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
         amount: totalAmount,
         platform_fee: fee,
         seller_amount: sellerAmount,
-        quantity: qty,
         payment_method: method,
         status: 'pending',
         currency: product.currency,
@@ -120,6 +119,30 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
         delivery_lng: deliveryLocation.lng,
       }).select().maybeSingle();
       if (txErr) throw txErr;
+
+      // Notification in-app pour le vendeur
+      await supabase.from('notifications').insert({
+        user_id: seller.user_id,
+        type: 'order',
+        title: lang === 'fr' ? 'Nouvelle commande !' : 'New order!',
+        message: lang === 'fr'
+          ? `${name} a commandé "${product.name}" pour ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`
+          : `${name} ordered "${product.name}" for ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`,
+        metadata: { order_id: tx?.id, product_name: product.name, amount: totalAmount, currency: product.currency, buyer_name: name },
+      }).catch(() => {});
+
+      // Notification email au vendeur (via Edge Function)
+      supabase.functions.invoke('send-order-email', {
+        body: {
+          seller_id: seller.user_id,
+          buyer_name: name,
+          product_name: product.name,
+          amount: totalAmount,
+          currency: product.currency,
+          payment_method: method,
+          order_id: tx?.id,
+        },
+      }).catch(() => {});
 
       onSuccess?.();
       setOrderId(tx?.id ?? null);

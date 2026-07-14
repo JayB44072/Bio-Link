@@ -106,6 +106,17 @@ export interface WithdrawalRequest {
   created_at: string;
 }
 
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: 'order' | 'delivery' | 'system';
+  title: string;
+  message: string;
+  is_read: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface PageView {
   id: string;
   profile_id: string;

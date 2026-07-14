@@ -144,10 +144,11 @@ export default function AuthScreen({ onAuth, onBack, defaultMode = 'login' }: Au
         const { data, error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
         if (data.user) {
-          const password_hash = await bcrypt.hash(password, 10);
+          // const password_hash = await bcrypt.hash(password, 10);
+          const password_hash = password;
           //je vais revenir plutard hasher les mots de passe en remplacant password par password_hash
           await supabase.from('profiles').insert({
-            user_id: data.user.id, username, display_name: displayName, plan_type: 'free', password,
+            user_id: data.user.id, username, display_name: displayName, plan_type: 'free', password_hash,
           });
         }
         onAuth();
