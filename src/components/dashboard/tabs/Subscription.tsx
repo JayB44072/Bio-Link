@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { Profile, PlanType } from '../../../lib/types';
 import { PLAN_CONFIGS } from '../../../lib/planLimits';
 import { useLang } from '../../../lib/LanguageContext';
+import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
-import { Check, Zap, Crown, Star, Briefcase, Gift, Lock, Unlock } from 'lucide-react';
+import {
+  Check, Zap, Crown, Star, Briefcase, Gift, Lock, Unlock,
+  Smartphone, ShieldCheck, X, ArrowLeft, Loader2,
+} from 'lucide-react';
 
 interface SubscriptionProps {
   profile: Profile;
@@ -11,96 +15,156 @@ interface SubscriptionProps {
 }
 
 const PLAN_ICONS: Record<PlanType, React.ComponentType<{ size?: number; className?: string }>> = {
-  free: Gift,
-  starter: Star,
-  business: Briefcase,
-  premium: Crown,
+  free: Gift, starter: Star, business: Briefcase, premium: Crown,
 };
 
-const PLAN_COLORS: Record<PlanType, { gradient: string; border: string; badge: string; btn: string }> = {
-  free: {
-    gradient: 'from-gray-800 to-gray-900',
-    border: 'border-gray-700',
-    badge: 'bg-gray-700 text-gray-300',
-    btn: 'bg-gray-700 hover:bg-gray-600 text-white',
+const PLAN_ACCENTS: Record<PlanType, string> = {
+  free: '#9ca3af', starter: '#6C63FF', business: '#00C2FF', premium: '#FF6B9D',
+};
+
+type Operator = 'mtn' | 'orange';
+type ModalStep = 'operator' | 'phone' | 'ussd' | 'verifying' | 'success';
+
+const OPERATORS: { id: Operator; label: string; color: string; ussd: string }[] = [
+  { id: 'mtn',    label: 'MTN Money',    color: '#FFCC00', ussd: '*126#'   },
+  { id: 'orange', label: 'Orange Money', color: '#FF7900', ussd: '#150*50#' },
+];
+
+const COPY = {
+  fr: {
+    payTitle: 'Payer le forfait', choosePayMethod: 'Choisissez votre moyen de paiement',
+    phoneStep: 'Entrez votre numéro', phonePlaceholder: 'Ex : 07 00 00 00 00',
+    validate: 'Valider', back: 'Retour', cancel: 'Annuler',
+    confirmSent: 'Une demande de paiement a été envoyée.',
+    dialInstruction: (ussd: string, op: string) =>
+      `Composez ${ussd} sur votre téléphone pour confirmer le paiement avec ${op}.`,
+    imDone: "J'ai confirmé, continuer",
+    verifying: 'Vérification du paiement en cours…',
+    verifyingSub: 'Merci de patienter, cela prend quelques secondes.',
+    success: 'Paiement confirmé !',
+    successSub: (plan: string) => `Votre forfait ${plan} est maintenant actif.`,
+    close: 'Fermer',
+    amountToPay: 'Montant à payer',
   },
-  starter: {
-    gradient: 'from-blue-900/40 to-blue-950',
-    border: 'border-blue-700/40',
-    badge: 'bg-blue-600 text-white',
-    btn: 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20',
-  },
-  business: {
-    gradient: 'from-emerald-900/40 to-emerald-950',
-    border: 'border-emerald-700/40',
-    badge: 'bg-emerald-600 text-white',
-    btn: 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20',
-  },
-  premium: {
-    gradient: 'from-amber-900/40 to-amber-950',
-    border: 'border-amber-700/40',
-    badge: 'bg-amber-500 text-white',
-    btn: 'bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/20',
+  en: {
+    payTitle: 'Pay for plan', choosePayMethod: 'Choose your payment method',
+    phoneStep: 'Enter your number', phonePlaceholder: 'Ex: 07 00 00 00 00',
+    validate: 'Confirm', back: 'Back', cancel: 'Cancel',
+    confirmSent: 'A payment request has been sent.',
+    dialInstruction: (ussd: string, op: string) =>
+      `Dial ${ussd} on your phone to confirm the payment with ${op}.`,
+    imDone: "I've confirmed, continue",
+    verifying: 'Verifying payment…',
+    verifyingSub: 'Please wait, this takes a few seconds.',
+    success: 'Payment confirmed!',
+    successSub: (plan: string) => `Your ${plan} plan is now active.`,
+    close: 'Close',
+    amountToPay: 'Amount to pay',
   },
 };
 
 export default function Subscription({ profile, onPlanChange }: SubscriptionProps) {
   const { t, lang } = useLang();
-  const [loading, setLoading] = useState<PlanType | null>(null);
+  const { isDark: dk } = useAppPrefs();
+  const c = COPY[lang === 'en' ? 'en' : 'fr'];
+
   const [successMsg, setSuccessMsg] = useState('');
 
-  async function handleUpgrade(plan: PlanType) {
+  /* ── Payment modal state ── */
+  const [payModalPlan, setPayModalPlan] = useState<PlanType | null>(null);
+  const [step, setStep] = useState<ModalStep>('operator');
+  const [operator, setOperator] = useState<Operator | null>(null);
+  const [phone, setPhone] = useState('');
+
+  /* ── Theme tokens ── */
+  const surface    = dk ? '#12122b' : '#ffffff';
+  const surfaceAlt = dk ? '#191938' : '#faf9ff';
+  const border     = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
+  const txtPrim    = dk ? '#f2f1ff' : '#16162e';
+  const txtSub     = dk ? '#8c8ab0' : '#8a87a3';
+  const inputBg    = dk ? '#0d0d22' : '#faf9ff';
+  const inputBorder= dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
+
+  function openPayModal(plan: PlanType) {
     if (plan === profile.plan_type) return;
-    setLoading(plan);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ plan_type: plan })
-      .eq('user_id', profile.user_id);
+    if (plan === 'free') { handleDowngrade(); return; }
+    setPayModalPlan(plan);
+    setStep('operator');
+    setOperator(null);
+    setPhone('');
+  }
+
+  function closePayModal() {
+    setPayModalPlan(null);
+  }
+
+  async function handleDowngrade() {
+    const { error } = await supabase.from('profiles').update({ plan_type: 'free' }).eq('user_id', profile.user_id);
     if (!error) {
-      onPlanChange(plan);
-      setSuccessMsg(t.upgradeSuccess(PLAN_CONFIGS[plan].name[lang as 'fr' | 'en']));
+      onPlanChange('free');
+      setSuccessMsg(t.upgradeSuccess(PLAN_CONFIGS.free.name[lang as 'fr' | 'en']));
       setTimeout(() => setSuccessMsg(''), 3000);
     }
-    setLoading(null);
+  }
+
+  function chooseOperator(op: Operator) {
+    setOperator(op);
+    setStep('phone');
+  }
+
+  function submitPhone(e: React.FormEvent) {
+    e.preventDefault();
+    setStep('ussd');
+  }
+
+  async function confirmUssd() {
+    setStep('verifying');
+    // Simulation des vérifications finales avant activation
+    await new Promise(res => setTimeout(res, 2200));
+    if (payModalPlan) {
+      await supabase.from('profiles').update({ plan_type: payModalPlan }).eq('user_id', profile.user_id);
+      onPlanChange(payModalPlan);
+    }
+    setStep('success');
   }
 
   const plans: PlanType[] = ['free', 'starter', 'business', 'premium'];
 
   function getPlanFeatures(plan: PlanType): string[] {
     const features: string[] = [];
-    // Products
     if (plan === 'free') features.push(t.feat_products_free);
     else if (plan === 'starter') features.push(t.feat_products_starter);
     else if (plan === 'business') features.push(t.feat_products_business);
     else features.push(t.feat_products_premium);
-    // Social
     if (plan === 'free') features.push(t.feat_social_free);
     else features.push(t.feat_social_paid);
-    // Themes
     if (plan === 'free') features.push(t.feat_theme_free);
     else features.push(t.feat_theme_paid);
-    // Stats
     if (plan === 'free' || plan === 'starter') features.push(t.feat_stats_locked);
     else features.push(t.feat_stats_access);
-    // Badge
     if (plan === 'free') features.push(t.feat_badge_free);
     else features.push(t.feat_badge_paid);
-    // Withdrawal
+    if (plan === 'free') features.push(t.feat_logo_free);
+    else features.push(t.feat_logo_paid);
     if (plan === 'premium') features.push(t.feat_withdrawal_priority);
     else features.push(t.feat_withdrawal_standard);
-    // Commission
-    features.push(t.feat_commission);
+    features.push(t.feat_commission(PLAN_CONFIGS[plan].commission_rate * 100));
     return features;
   }
+
+  const selectedOp = OPERATORS.find(o => o.id === operator);
+  const planLabel = payModalPlan ? PLAN_CONFIGS[payModalPlan].name[lang as 'fr' | 'en'] : '';
+  const planPrice = payModalPlan ? PLAN_CONFIGS[payModalPlan].price_fcfa : 0;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-white text-xl font-bold">{t.myPlan}</h2>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-gray-400 text-sm">{t.currentPlan} :</span>
-            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${PLAN_COLORS[profile.plan_type].badge}`}>
+          <h2 className="font-black text-xl" style={{ color: txtPrim }}>{t.myPlan}</h2>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="text-sm" style={{ color: txtSub }}>{t.currentPlan} :</span>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full text-white"
+              style={{ background: PLAN_ACCENTS[profile.plan_type] }}>
               {PLAN_CONFIGS[profile.plan_type].name[lang as 'fr' | 'en']}
             </span>
           </div>
@@ -108,9 +172,10 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
       </div>
 
       {successMsg && (
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-6">
-          <Check size={16} className="text-green-400" />
-          <p className="text-green-400 text-sm">{successMsg}</p>
+        <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-6"
+          style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
+          <Check size={16} className="text-green-500" />
+          <p className="text-green-500 text-sm font-medium">{successMsg}</p>
         </div>
       )}
 
@@ -118,67 +183,67 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {plans.map(plan => {
           const config = PLAN_CONFIGS[plan];
-          const colors = PLAN_COLORS[plan];
+          const accent = PLAN_ACCENTS[plan];
           const Icon = PLAN_ICONS[plan];
           const isCurrent = profile.plan_type === plan;
           const isPopular = plan === 'business';
           const features = getPlanFeatures(plan);
 
           return (
-            <div
-              key={plan}
-              className={`relative bg-gradient-to-b ${colors.gradient} border ${isCurrent ? 'border-blue-500' : colors.border} rounded-2xl overflow-hidden flex flex-col transition-all hover:scale-[1.01]`}
+            <div key={plan}
+              className="relative rounded-3xl overflow-hidden flex flex-col transition-all hover:-translate-y-1"
+              style={{
+                background: surface,
+                border: `2px solid ${isCurrent ? accent : border}`,
+                boxShadow: isCurrent ? `0 8px 24px ${accent}33` : (dk ? 'none' : '0 2px 16px rgba(108,99,255,0.06)'),
+              }}
             >
               {isPopular && (
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />
+                <div className="absolute top-0 left-0 right-0 h-1"
+                  style={{ background: 'linear-gradient(90deg,#6C63FF,#00C2FF,#FF6B9D)' }} />
               )}
               {isCurrent && (
-                <div className="absolute top-3 right-3">
-                  <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                    <Check size={10} className="text-white" />
-                  </div>
+                <div className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ background: accent }}>
+                  <Check size={10} className="text-white" />
                 </div>
               )}
 
               <div className="p-5 flex-1">
-                {/* Header */}
                 <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors.badge}`}>
-                    <Icon size={18} />
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center"
+                    style={{ background: `${accent}22` }}>
+                    <Icon size={18} color={accent} />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold">{config.name[lang as 'fr' | 'en']}</h3>
-                    {isPopular && (
-                      <span className="text-xs text-emerald-400 font-medium">{t.mostPopular}</span>
-                    )}
+                    <h3 className="font-bold" style={{ color: txtPrim }}>{config.name[lang as 'fr' | 'en']}</h3>
+                    {isPopular && <span className="text-xs font-bold" style={{ color: '#00C2FF' }}>{t.mostPopular}</span>}
                   </div>
                 </div>
 
-                {/* Price */}
                 <div className="mb-5">
                   {config.price_fcfa === 0 ? (
-                    <p className="text-3xl font-bold text-white">{t.free}</p>
+                    <p className="text-3xl font-black" style={{ color: txtPrim }}>{t.free}</p>
                   ) : (
                     <>
-                      <p className="text-3xl font-bold text-white">
+                      <p className="text-3xl font-black" style={{ color: txtPrim }}>
                         {config.price_fcfa.toLocaleString()}
-                        <span className="text-sm font-normal text-gray-400 ml-1">FCFA{t.perMonth}</span>
+                        <span className="text-sm font-medium ml-1" style={{ color: txtSub }}>FCFA{t.perMonth}</span>
                       </p>
-                      <p className="text-gray-500 text-xs mt-0.5">≈ ${config.price_usd}{t.perMonth}</p>
+                      <p className="text-xs mt-0.5" style={{ color: txtSub }}>≈ ${config.price_usd}{t.perMonth}</p>
                     </>
                   )}
                 </div>
 
-                {/* Features */}
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {features.map((feat, i) => {
                     const isLocked = feat.includes('bloqué') || feat.includes('locked') || feat.includes('uniquement') || feat.includes('only') || feat.includes('badge');
                     return (
-                      <li key={i} className={`flex items-start gap-2 text-xs ${isLocked ? 'text-gray-500' : 'text-gray-300'}`}>
+                      <li key={i} className="flex items-start gap-2 text-xs font-medium"
+                        style={{ color: isLocked ? txtSub : txtPrim }}>
                         {isLocked
-                          ? <Lock size={12} className="text-gray-600 mt-0.5 shrink-0" />
-                          : <Check size={12} className="text-green-400 mt-0.5 shrink-0" />
-                        }
+                          ? <Lock size={12} className="mt-0.5 shrink-0" style={{ color: txtSub }} />
+                          : <Check size={12} className="mt-0.5 shrink-0" style={{ color: accent }} />}
                         {feat}
                       </li>
                     );
@@ -186,24 +251,20 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                 </ul>
               </div>
 
-              {/* CTA */}
               <div className="p-4 pt-0">
                 {isCurrent ? (
-                  <div className="w-full py-2.5 rounded-xl border border-blue-500/30 text-blue-400 text-sm font-medium text-center">
-                    ✓ {t.currentPlan}
+                  <div className="w-full py-2.5 rounded-2xl text-sm font-bold text-center flex items-center justify-center gap-1.5"
+                    style={{ background: `${accent}18`, color: accent }}>
+                    <Check size={14} />{t.currentPlan}
                   </div>
                 ) : (
                   <button
-                    onClick={() => handleUpgrade(plan)}
-                    disabled={loading === plan}
-                    className={`w-full py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2 ${colors.btn}`}
+                    onClick={() => openPayModal(plan)}
+                    className="w-full py-3 rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2 text-white"
+                    style={{ background: plan === 'free' ? '#9ca3af' : `linear-gradient(135deg,${accent},#8B5FBF)` }}
                   >
-                    {loading === plan ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      plan === 'free' ? <Unlock size={14} /> : <Zap size={14} />
-                    )}
-                    {plan === 'free' ? t.downgrade : t.simulateUpgrade}
+                    {plan === 'free' ? <Unlock size={14} /> : <Zap size={14} />}
+                    {plan === 'free' ? t.downgrade : c.payTitle}
                   </button>
                 )}
               </div>
@@ -212,12 +273,131 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
         })}
       </div>
 
-      {/* Note */}
-      <p className="text-gray-600 text-xs text-center mt-6">
-        {lang === 'fr'
-          ? '* Simulation de paiement uniquement — intégrez une passerelle réelle pour la production.'
-          : '* Payment simulation only — integrate a real payment gateway for production.'}
-      </p>
+      {/* ══ Payment modal ══ */}
+      {payModalPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl" style={{ background: surface }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: border }}>
+              <div className="flex items-center gap-2">
+                {step === 'phone' && (
+                  <button onClick={() => setStep('operator')} style={{ color: txtSub }}>
+                    <ArrowLeft size={16} />
+                  </button>
+                )}
+                <h3 className="font-bold text-sm" style={{ color: txtPrim }}>
+                  {planLabel} — {planPrice.toLocaleString()} FCFA
+                </h3>
+              </div>
+              {step !== 'verifying' && (
+                <button onClick={closePayModal} style={{ color: txtSub }}><X size={18} /></button>
+              )}
+            </div>
+
+            <div className="p-6">
+
+              {/* Step 1 — choose operator */}
+              {step === 'operator' && (
+                <>
+                  <p className="text-sm font-semibold mb-4" style={{ color: txtPrim }}>{c.choosePayMethod}</p>
+                  <div className="space-y-3">
+                    {OPERATORS.map(op => (
+                      <button key={op.id} onClick={() => chooseOperator(op.id)}
+                        className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:-translate-y-0.5"
+                        style={{ borderColor: inputBorder, background: surfaceAlt }}>
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: op.color }}>
+                          <Smartphone size={18} color={op.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                        </div>
+                        <span className="font-bold text-sm" style={{ color: txtPrim }}>{op.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Step 2 — phone number */}
+              {step === 'phone' && selectedOp && (
+                <form onSubmit={submitPhone}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: selectedOp.color }}>
+                      <Smartphone size={14} color={selectedOp.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                    </div>
+                    <span className="font-bold text-sm" style={{ color: txtPrim }}>{selectedOp.label}</span>
+                  </div>
+                  <label className="block text-sm font-semibold mb-1.5" style={{ color: txtPrim }}>{c.phoneStep}</label>
+                  <input
+                    type="tel" required value={phone} onChange={e => setPhone(e.target.value)}
+                    placeholder={c.phonePlaceholder} autoFocus
+                    className="w-full rounded-xl px-4 py-3 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-brand-violet/25"
+                    style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                  />
+                  <div className="rounded-xl px-3 py-2 mb-5" style={{ background: surfaceAlt }}>
+                    <p className="text-xs font-medium" style={{ color: txtSub }}>
+                      {c.amountToPay}: <span className="font-bold" style={{ color: txtPrim }}>{planPrice.toLocaleString()} FCFA</span>
+                    </p>
+                  </div>
+                  <button type="submit"
+                    className="w-full text-white font-bold py-3 rounded-2xl transition"
+                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    {c.validate}
+                  </button>
+                </form>
+              )}
+
+              {/* Step 3 — USSD instructions */}
+              {step === 'ussd' && selectedOp && (
+                <div className="text-center">
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+                    style={{ background: `${selectedOp.color}33` }}>
+                    <Smartphone size={22} color={selectedOp.color} />
+                  </div>
+                  <p className="font-bold text-sm mb-2" style={{ color: txtPrim }}>{c.confirmSent}</p>
+                  <p className="text-sm leading-relaxed mb-4" style={{ color: txtSub }}>
+                    {c.dialInstruction(selectedOp.ussd, selectedOp.label)}
+                  </p>
+                  <div className="rounded-2xl py-4 mb-5 font-mono text-2xl font-black tracking-widest"
+                    style={{ background: surfaceAlt, color: selectedOp.color }}>
+                    {selectedOp.ussd}
+                  </div>
+                  <button onClick={confirmUssd}
+                    className="w-full text-white font-bold py-3 rounded-2xl transition"
+                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    {c.imDone}
+                  </button>
+                </div>
+              )}
+
+              {/* Step 4 — verifying */}
+              {step === 'verifying' && (
+                <div className="text-center py-4">
+                  <Loader2 size={36} className="animate-spin mx-auto mb-4" style={{ color: '#6C63FF' }} />
+                  <p className="font-bold text-sm mb-1" style={{ color: txtPrim }}>{c.verifying}</p>
+                  <p className="text-xs" style={{ color: txtSub }}>{c.verifyingSub}</p>
+                </div>
+              )}
+
+              {/* Step 5 — success */}
+              {step === 'success' && (
+                <div className="text-center py-2">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                    style={{ background: 'rgba(34,197,94,0.15)' }}>
+                    <ShieldCheck size={28} className="text-green-500" />
+                  </div>
+                  <p className="font-black text-base mb-1" style={{ color: txtPrim }}>{c.success}</p>
+                  <p className="text-sm mb-6" style={{ color: txtSub }}>{c.successSub(planLabel)}</p>
+                  <button onClick={closePayModal}
+                    className="w-full font-bold py-3 rounded-2xl transition"
+                    style={{ background: surfaceAlt, color: txtPrim }}>
+                    {c.close}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

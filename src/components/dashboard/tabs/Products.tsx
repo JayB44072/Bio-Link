@@ -1,332 +1,12 @@
-// import React, { useState } from 'react';
-// import { Product, Profile } from '../../../lib/types';
-// import { PLAN_CONFIGS, canAddProduct, getNextPlan } from '../../../lib/planLimits';
-// import { useLang } from '../../../lib/LanguageContext';
-// import { supabase } from '../../../lib/supabase';
-// import {
-//   Plus, Edit2, Trash2, Lock, ShoppingBag, X, Check, Package, ArrowUp
-// } from 'lucide-react';
-
-// interface ProductsProps {
-//   profile: Profile;
-//   products: Product[];
-//   onUpdate: (products: Product[]) => void;
-// }
-
-// interface ProductFormData {
-//   name: string;
-//   description: string;
-//   price: string;
-//   image_url: string;
-//   currency: string;
-//   is_active: boolean;
-// }
-
-// const emptyForm: ProductFormData = {
-//   name: '',
-//   description: '',
-//   price: '',
-//   image_url: '',
-//   currency: 'FCFA',
-//   is_active: true,
-// };
-
-// export default function Products({ profile, products, onUpdate }: ProductsProps) {
-//   const { t } = useLang();
-//   const [modal, setModal] = useState<'add' | 'edit' | 'delete' | null>(null);
-//   const [editingId, setEditingId] = useState<string | null>(null);
-//   const [form, setForm] = useState<ProductFormData>(emptyForm);
-//   const [saving, setSaving] = useState(false);
-//   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-//   const plan = profile.plan_type;
-//   const planConfig = PLAN_CONFIGS[plan];
-//   const maxProducts = planConfig.max_products;
-//   const canAdd = canAddProduct(plan, products.length);
-//   const nextPlan = getNextPlan(plan);
-
-//   function openAdd() {
-//     setForm(emptyForm);
-//     setEditingId(null);
-//     setModal('add');
-//   }
-
-//   function openEdit(p: Product) {
-//     setForm({
-//       name: p.name,
-//       description: p.description,
-//       price: String(p.price),
-//       image_url: p.image_url,
-//       currency: p.currency,
-//       is_active: p.is_active,
-//     });
-//     setEditingId(p.id);
-//     setModal('edit');
-//   }
-
-//   function openDelete(id: string) {
-//     setDeletingId(id);
-//     setModal('delete');
-//   }
-
-//   async function handleSave() {
-//     setSaving(true);
-//     const payload = {
-//       user_id: profile.user_id,
-//       name: form.name,
-//       description: form.description,
-//       price: parseFloat(form.price) || 0,
-//       image_url: form.image_url,
-//       currency: form.currency,
-//       is_active: form.is_active,
-//       updated_at: new Date().toISOString(),
-//     };
-
-//     if (modal === 'add') {
-//       const { data, error } = await supabase.from('products').insert(payload).select().maybeSingle();
-//       if (!error && data) onUpdate([...products, data]);
-//     } else if (modal === 'edit' && editingId) {
-//       const { data, error } = await supabase
-//         .from('products').update(payload).eq('id', editingId).select().maybeSingle();
-//       if (!error && data) onUpdate(products.map(p => p.id === editingId ? data : p));
-//     }
-//     setSaving(false);
-//     setModal(null);
-//   }
-
-//   async function handleDelete() {
-//     if (!deletingId) return;
-//     setSaving(true);
-//     await supabase.from('products').delete().eq('id', deletingId);
-//     onUpdate(products.filter(p => p.id !== deletingId));
-//     setSaving(false);
-//     setModal(null);
-//     setDeletingId(null);
-//   }
-
-//   return (
-//     <div>
-//       {/* Header */}
-//       <div className="flex items-center justify-between mb-6">
-//         <div>
-//           <h2 className="text-white text-xl font-bold">{t.myProducts}</h2>
-//           <p className="text-gray-400 text-sm mt-0.5">
-//             {t.productsCount(products.length, maxProducts)}
-//           </p>
-//         </div>
-//         {canAdd ? (
-//           <button
-//             onClick={openAdd}
-//             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-lg shadow-blue-600/20"
-//           >
-//             <Plus size={16} />
-//             {t.addProduct}
-//           </button>
-//         ) : (
-//           <div className="flex items-center gap-2">
-//             <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5">
-//               <Lock size={14} className="text-amber-400" />
-//               <span className="text-amber-400 text-xs font-medium">{t.productLimitReached}</span>
-//             </div>
-//           </div>
-//         )}
-//       </div>
-
-//       {/* Limit reached banner */}
-//       {!canAdd && nextPlan && (
-//         <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex items-center justify-between gap-4">
-//           <div className="flex items-center gap-3">
-//             <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
-//               <ArrowUp size={18} className="text-amber-400" />
-//             </div>
-//             <div>
-//               <p className="text-amber-300 text-sm font-semibold">{t.productLimitReached}</p>
-//               <p className="text-amber-400/70 text-xs">{t.upgradeToAdd(PLAN_CONFIGS[nextPlan].name.fr)}</p>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Progress bar */}
-//       {maxProducts && (
-//         <div className="mb-6">
-//           <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-//             <span>{products.length} produits</span>
-//             <span>{maxProducts} max</span>
-//           </div>
-//           <div className="w-full bg-gray-800 rounded-full h-1.5">
-//             <div
-//               className={`h-1.5 rounded-full transition-all ${
-//                 products.length >= maxProducts ? 'bg-red-500' :
-//                 products.length >= maxProducts * 0.8 ? 'bg-amber-500' : 'bg-blue-500'
-//               }`}
-//               style={{ width: `${Math.min((products.length / maxProducts) * 100, 100)}%` }}
-//             />
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Products grid */}
-//       {products.length === 0 ? (
-//         <div className="text-center py-16 text-gray-500">
-//           <Package size={40} className="mx-auto mb-3 opacity-40" />
-//           <p className="text-sm">{t.noProducts}</p>
-//         </div>
-//       ) : (
-//         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-//           {products.map(product => (
-//             <div key={product.id} className="bg-gray-800/60 border border-gray-700/50 rounded-2xl overflow-hidden hover:border-gray-600 transition-all group">
-//               {/* Image */}
-//               <div className="h-40 bg-gray-700 relative overflow-hidden">
-//                 {product.image_url ? (
-//                   <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-//                 ) : (
-//                   <div className="w-full h-full flex items-center justify-center">
-//                     <ShoppingBag size={32} className="text-gray-600" />
-//                   </div>
-//                 )}
-//                 <div className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-medium ${
-//                   product.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-600/50 text-gray-400'
-//                 }`}>
-//                   {product.is_active ? t.active : t.inactive}
-//                 </div>
-//               </div>
-//               {/* Info */}
-//               <div className="p-4">
-//                 <h3 className="text-white font-semibold text-sm truncate">{product.name}</h3>
-//                 <p className="text-gray-400 text-xs mt-0.5 line-clamp-2">{product.description}</p>
-//                 <div className="flex items-center justify-between mt-3">
-//                   <span className="text-blue-400 font-bold text-sm">
-//                     {product.price.toLocaleString()} {product.currency}
-//                   </span>
-//                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-//                     <button
-//                       onClick={() => openEdit(product)}
-//                       className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition"
-//                     >
-//                       <Edit2 size={14} />
-//                     </button>
-//                     <button
-//                       onClick={() => openDelete(product.id)}
-//                       className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-//                     >
-//                       <Trash2 size={14} />
-//                     </button>
-//                   </div>
-//                 </div>
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-//       )}
-
-//       {/* Modal */}
-//       {(modal === 'add' || modal === 'edit') && (
-//         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-//           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl">
-//             <div className="flex items-center justify-between p-6 border-b border-gray-800">
-//               <h3 className="text-white font-bold">{modal === 'add' ? t.addProduct : t.editProduct}</h3>
-//               <button onClick={() => setModal(null)} className="text-gray-400 hover:text-white"><X size={20} /></button>
-//             </div>
-//             <div className="p-6 space-y-4">
-//               <div>
-//                 <label className="block text-gray-300 text-sm mb-1.5">{t.productName}</label>
-//                 <input
-//                   type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-//                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-//                 />
-//               </div>
-//               <div>
-//                 <label className="block text-gray-300 text-sm mb-1.5">{t.productDesc}</label>
-//                 <textarea
-//                   value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-//                   rows={2}
-//                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-//                 />
-//               </div>
-//               <div className="flex gap-3">
-//                 <div className="flex-1">
-//                   <label className="block text-gray-300 text-sm mb-1.5">{t.productPrice}</label>
-//                   <input
-//                     type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-//                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-//                   />
-//                 </div>
-//                 <div className="w-28">
-//                   <label className="block text-gray-300 text-sm mb-1.5">{t.currency}</label>
-//                   <select
-//                     value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
-//                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-//                   >
-//                     <option value="FCFA">FCFA</option>
-//                     <option value="USD">USD</option>
-//                     <option value="EUR">EUR</option>
-//                   </select>
-//                 </div>
-//               </div>
-//               <div>
-//                 <label className="block text-gray-300 text-sm mb-1.5">{t.productImage}</label>
-//                 <input
-//                   type="url" value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))}
-//                   placeholder="https://images.pexels.com/..."
-//                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-//                 />
-//               </div>
-//               <div className="flex items-center gap-3">
-//                 <button
-//                   onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))}
-//                   className={`relative w-11 h-6 rounded-full transition-colors ${form.is_active ? 'bg-blue-600' : 'bg-gray-600'}`}
-//                 >
-//                   <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-5.5 left-0.5' : 'left-0.5'}`} style={{ transform: form.is_active ? 'translateX(20px)' : 'translateX(0)' }} />
-//                 </button>
-//                 <span className="text-gray-300 text-sm">{form.is_active ? t.active : t.inactive}</span>
-//               </div>
-//             </div>
-//             <div className="flex gap-3 p-6 border-t border-gray-800">
-//               <button onClick={() => setModal(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-xl transition">{t.cancel}</button>
-//               <button
-//                 onClick={handleSave}
-//                 disabled={saving || !form.name}
-//                 className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
-//               >
-//                 {saving ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></> : <Check size={16} />}
-//                 {t.save}
-//               </button>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Delete modal */}
-//       {modal === 'delete' && (
-//         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-//           <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
-//             <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-//               <Trash2 size={20} className="text-red-400" />
-//             </div>
-//             <h3 className="text-white font-bold mb-2">{t.confirmDelete}</h3>
-//             <div className="flex gap-3 mt-6">
-//               <button onClick={() => setModal(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-xl transition">{t.cancel}</button>
-//               <button onClick={handleDelete} disabled={saving} className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition">
-//                 {saving ? '...' : t.deleteProduct}
-//               </button>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-
-
 import React, { useState, useRef } from 'react';
 import { Product, Profile } from '../../../lib/types';
 import { PLAN_CONFIGS, canAddProduct, getNextPlan } from '../../../lib/planLimits';
 import { useLang } from '../../../lib/LanguageContext';
+import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
+import LocationAutocomplete, { LocationValue } from '../../ui/LocationAutocomplete';
 import {
-  Plus, Edit2, Trash2, Lock, ShoppingBag, X, Check, Package, ArrowUp, Upload, Image as ImageIcon, Loader2
+  Plus, Edit2, Trash2, Lock, ShoppingBag, X, Check, Package, ArrowUp, Upload, Loader2, ArrowLeft, Star,
 } from 'lucide-react';
 
 interface ProductsProps {
@@ -339,29 +19,30 @@ interface ProductFormData {
   name: string;
   description: string;
   price: string;
-  image_url: string;
+  quantity: string;
+  images: string[];
   currency: string;
   is_active: boolean;
+  location: LocationValue;
 }
 
 const emptyForm: ProductFormData = {
-  name: '',
-  description: '',
-  price: '',
-  image_url: '',
-  currency: 'FCFA',
-  is_active: true,
+  name: '', description: '', price: '', quantity: '', images: [], currency: 'FCFA', is_active: true,
+  location: { address: '', lat: null, lng: null },
 };
+
+const MAX_IMAGES = 8;
 
 export default function Products({ profile, products, onUpdate }: ProductsProps) {
   const { t, lang } = useLang();
-  const [modal, setModal] = useState<'add' | 'edit' | 'delete' | null>(null);
+  const { isDark: dk } = useAppPrefs();
+  const [view, setView] = useState<'list' | 'form'>('list');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const plan = profile.plan_type;
@@ -370,71 +51,83 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
   const canAdd = canAddProduct(plan, products.length);
   const nextPlan = getNextPlan(plan);
 
+  /* ── Theme tokens ── */
+  const surface     = dk ? '#12122b' : '#ffffff';
+  const surfaceAlt  = dk ? '#191938' : '#faf9ff';
+  const border      = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
+  const txtPrim     = dk ? '#f2f1ff' : '#16162e';
+  const txtLabel    = dk ? '#c7c5e8' : '#2d2b45';
+  const txtSub      = dk ? '#8c8ab0' : '#8a87a3';
+  const inputBg     = dk ? '#0d0d22' : '#faf9ff';
+  const inputBorder = dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
+  const inputCls    = 'w-full rounded-xl px-4 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-brand-violet/25';
+  const labelCls    = 'block text-sm font-semibold mb-1.5';
+
   function openAdd() {
     setForm(emptyForm);
     setEditingId(null);
-    setModal('add');
+    setView('form');
   }
 
   function openEdit(p: Product) {
     setForm({
-      name: p.name,
-      description: p.description,
-      price: String(p.price),
-      image_url: p.image_url,
-      currency: p.currency,
-      is_active: p.is_active,
+      name: p.name, description: p.description, price: String(p.price), quantity: String(p.quantity ?? 0),
+      images: p.images?.length ? p.images : (p.image_url ? [p.image_url] : []),
+      currency: p.currency, is_active: p.is_active,
+      location: { address: p.location_address || '', lat: p.location_lat, lng: p.location_lng },
     });
     setEditingId(p.id);
-    setModal('edit');
+    setView('form');
   }
 
-  function openDelete(id: string) {
-    setDeletingId(id);
-    setModal('delete');
+  function closeForm() {
+    setView('list');
+    setEditingId(null);
   }
 
-  // --- LOGIQUE D'UPLOAD VERS SUPABASE STORAGE ---
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Optionnel : Validation de type ou de taille (ex: max 3 Mo)
     if (!file.type.startsWith('image/')) {
       alert(lang === 'fr' ? 'Veuillez sélectionner un fichier image valide.' : 'Please select a valid image file.');
       return;
     }
+    if (form.images.length >= MAX_IMAGES) return;
 
-    setUploading(true);
+    const slotIdx = form.images.length;
+    setUploadingIdx(slotIdx);
     try {
-      // Génération d' un nom de fichier unique basé sur le timestamp
       const fileExt = file.name.split('.').pop();
       const fileName = `${profile.user_id}/${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
 
-      // 1. Upload du fichier dans le bucket 'product-images'
       const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // 2. Récupération de l'URL publique du fichier stocké
-      const { data: { publicUrl } } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      // 3. Mise à jour de l'état du formulaire avec le lien obtenu
-      setForm(f => ({ ...f, image_url: publicUrl }));
+      const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(fileName);
+      setForm(f => ({ ...f, images: [...f.images, publicUrl] }));
     } catch (err: any) {
       console.error("Erreur lors de l'upload:", err.message);
       alert(lang === 'fr' ? "Échec du téléchargement de l'image." : "Image upload failed.");
     } finally {
-      setUploading(false);
+      setUploadingIdx(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  }
+
+  function removeImage(idx: number) {
+    setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
+  }
+
+  function makeCover(idx: number) {
+    setForm(f => {
+      const imgs = [...f.images];
+      const [chosen] = imgs.splice(idx, 1);
+      return { ...f, images: [chosen, ...imgs] };
+    });
   }
 
   async function handleSave() {
@@ -444,73 +137,244 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
       name: form.name,
       description: form.description,
       price: parseFloat(form.price) || 0,
-      image_url: form.image_url,
+      quantity: parseInt(form.quantity, 10) || 0,
+      image_url: form.images[0] || '',
+      images: form.images,
       currency: form.currency,
       is_active: form.is_active,
+      location_address: form.location.address,
+      location_lat: form.location.lat,
+      location_lng: form.location.lng,
       updated_at: new Date().toISOString(),
     };
 
-    if (modal === 'add') {
+    if (!editingId) {
       const { data, error } = await supabase.from('products').insert(payload).select().maybeSingle();
       if (!error && data) onUpdate([...products, data]);
-    } else if (modal === 'edit' && editingId) {
-      const { data, error } = await supabase
-        .from('products').update(payload).eq('id', editingId).select().maybeSingle();
+    } else {
+      const { data, error } = await supabase.from('products').update(payload).eq('id', editingId).select().maybeSingle();
       if (!error && data) onUpdate(products.map(p => p.id === editingId ? data : p));
     }
     setSaving(false);
-    setModal(null);
+    closeForm();
   }
 
   async function handleDelete() {
-    if (!deletingId) return;
+    if (!deleteId) return;
     setSaving(true);
-    await supabase.from('products').delete().eq('id', deletingId);
-    onUpdate(products.filter(p => p.id !== deletingId));
+    await supabase.from('products').delete().eq('id', deleteId);
+    onUpdate(products.filter(p => p.id !== deleteId));
     setSaving(false);
-    setModal(null);
-    setDeletingId(null);
+    setDeleteId(null);
   }
 
+  const progressPct = maxProducts ? Math.min((products.length / maxProducts) * 100, 100) : 0;
+  const progressColor = !maxProducts ? '#6C63FF'
+    : products.length >= maxProducts ? '#ef4444'
+    : products.length >= maxProducts * 0.8 ? '#f59e0b' : '#6C63FF';
+
+  /* ══════════════════ FORM VIEW — pleine page façon Amazon / Alibaba ══════════════════ */
+  if (view === 'form') {
+    return (
+      <div>
+        {/* Header du formulaire — connecté visuellement à l'onglet */}
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={closeForm}
+            className="w-9 h-9 rounded-xl flex items-center justify-center transition shrink-0"
+            style={{ background: surfaceAlt, color: txtSub }}>
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <h2 className="font-black text-xl" style={{ color: txtPrim }}>
+              {editingId ? t.editProduct : t.addProduct}
+            </h2>
+            <p className="text-xs" style={{ color: txtSub }}>
+              {lang === 'fr' ? 'Renseignez les informations et photos de votre article' : 'Fill in your item details and photos'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
+
+          {/* ── Colonne galerie photos ── */}
+          <div className="rounded-3xl p-5" style={{ background: surface, border: `1px solid ${border}` }}>
+            <div className="flex items-center justify-between mb-1">
+              <label className={labelCls} style={{ color: txtLabel, marginBottom: 0 }}>
+                {lang === 'fr' ? 'Photos du produit' : 'Product photos'}
+              </label>
+              <span className="text-xs font-medium" style={{ color: txtSub }}>{form.images.length}/{MAX_IMAGES}</span>
+            </div>
+            <p className="text-xs mb-4" style={{ color: txtSub }}>
+              {lang === 'fr'
+                ? 'La première photo est la photo principale. Cliquez sur une autre photo pour la définir comme principale.'
+                : 'The first photo is the cover photo. Click another photo to make it the cover.'}
+            </p>
+
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+
+            {/* Grande zone photo principale */}
+            <div className="relative rounded-2xl overflow-hidden h-64 mb-3 flex items-center justify-center"
+              style={{ background: surfaceAlt, border: `1px solid ${inputBorder}` }}>
+              {form.images[0] ? (
+                <>
+                  <img src={form.images[0]} alt="Cover" className="w-full h-full object-cover" />
+                  <span className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full text-white"
+                    style={{ background: 'rgba(0,0,0,0.5)' }}>
+                    <Star size={10} fill="#FFD166" color="#FFD166" />
+                    {lang === 'fr' ? 'Principale' : 'Cover'}
+                  </span>
+                  <button onClick={() => removeImage(0)}
+                    className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-white transition"
+                    style={{ background: 'rgba(0,0,0,0.5)' }}>
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <ShoppingBag size={36} style={{ color: txtSub }} />
+                  <span className="text-xs font-medium" style={{ color: txtSub }}>
+                    {lang === 'fr' ? 'Aucune photo' : 'No photo yet'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Miniatures */}
+            <div className="grid grid-cols-4 gap-2.5">
+              {form.images.slice(1).map((img, i) => {
+                const idx = i + 1;
+                return (
+                  <div key={img} className="relative rounded-xl overflow-hidden h-20 group cursor-pointer"
+                    style={{ background: surfaceAlt, border: `1px solid ${inputBorder}` }}
+                    onClick={() => makeCover(idx)}>
+                    <img src={img} alt={`photo ${idx + 1}`} className="w-full h-full object-cover" />
+                    <button onClick={e => { e.stopPropagation(); removeImage(idx); }}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition"
+                      style={{ background: 'rgba(0,0,0,0.55)' }}>
+                      <X size={11} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {form.images.length < MAX_IMAGES && (
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingIdx !== null}
+                  className="rounded-xl h-20 flex flex-col items-center justify-center gap-1 transition disabled:opacity-60"
+                  style={{ background: surfaceAlt, border: `2px dashed ${inputBorder}` }}>
+                  {uploadingIdx !== null ? (
+                    <Loader2 size={16} className="animate-spin" style={{ color: '#6C63FF' }} />
+                  ) : (
+                    <>
+                      <Upload size={15} style={{ color: '#6C63FF' }} />
+                      <span className="text-[10px] font-semibold" style={{ color: '#6C63FF' }}>
+                        {lang === 'fr' ? 'Ajouter' : 'Add'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Colonne informations ── */}
+          <div className="rounded-3xl p-5 space-y-4" style={{ background: surface, border: `1px solid ${border}` }}>
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>{t.productName}</label>
+              <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }} />
+            </div>
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>{t.productDesc}</label>
+              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                rows={4} className={`${inputCls} resize-none`}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }} />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className={labelCls} style={{ color: txtLabel }}>{t.productPrice}</label>
+                <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                  className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }} />
+              </div>
+              <div className="w-28">
+                <label className={labelCls} style={{ color: txtLabel }}>{t.currency}</label>
+                <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
+                  className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}>
+                  <option value="FCFA">FCFA</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>{t.productQuantity}</label>
+              <input type="number" min="0" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+                className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }} />
+            </div>
+
+            <LocationAutocomplete
+              label={lang === 'fr' ? 'Emplacement du produit' : 'Product location'}
+              placeholder={lang === 'fr' ? 'Ville, quartier, adresse...' : 'City, area, address...'}
+              myLocationLabel={lang === 'fr' ? 'Utiliser ma position actuelle' : 'Use my current location'}
+              value={form.location}
+              onChange={loc => setForm(f => ({ ...f, location: loc }))}
+              isDark={dk}
+            />
+
+            <div className="flex gap-3 pt-3">
+              <button onClick={closeForm} className="flex-1 text-sm font-semibold py-3 rounded-xl transition"
+                style={{ background: surfaceAlt, color: txtSub }}>{t.cancel}</button>
+              <button onClick={handleSave} disabled={saving || uploadingIdx !== null || !form.name}
+                className="flex-1 text-white text-sm font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check size={16} />}
+                {t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════════════════ LIST VIEW ══════════════════ */
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h2 className="text-white text-xl font-bold">{t.myProducts}</h2>
-          <p className="text-gray-400 text-sm mt-0.5">
-            {t.productsCount(products.length, maxProducts)}
-          </p>
+          <h2 className="font-black text-xl" style={{ color: txtPrim }}>{t.myProducts}</h2>
+          <p className="text-sm mt-0.5" style={{ color: txtSub }}>{t.productsCount(products.length, maxProducts)}</p>
         </div>
         {canAdd ? (
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-lg shadow-blue-600/20"
+            className="flex items-center gap-2 text-white text-sm font-bold px-4 py-2.5 rounded-2xl transition shadow-lg"
+            style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)', boxShadow: '0 8px 20px rgba(108,99,255,0.3)' }}
           >
-            <Plus size={16} />
-            {t.addProduct}
+            <Plus size={16} />{t.addProduct}
           </button>
         ) : (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5">
-              <Lock size={14} className="text-amber-400" />
-              <span className="text-amber-400 text-xs font-medium">{t.productLimitReached}</span>
-            </div>
+          <div className="flex items-center gap-1.5 rounded-2xl px-3 py-2.5"
+            style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)' }}>
+            <Lock size={14} className="text-amber-500" />
+            <span className="text-amber-500 text-xs font-semibold">{t.productLimitReached}</span>
           </div>
         )}
       </div>
 
       {/* Limit reached banner */}
       {!canAdd && nextPlan && (
-        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
-              <ArrowUp size={18} className="text-amber-400" />
-            </div>
-            <div>
-              <p className="text-amber-300 text-sm font-semibold">{t.productLimitReached}</p>
-              <p className="text-amber-400/70 text-xs">{t.upgradeToAdd(PLAN_CONFIGS[nextPlan].name.fr)}</p>
-            </div>
+        <div className="rounded-2xl p-4 mb-6 flex items-center gap-3"
+          style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(251,191,36,0.18)' }}>
+            <ArrowUp size={18} className="text-amber-500" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-500">{t.productLimitReached}</p>
+            <p className="text-xs" style={{ color: dk ? 'rgba(251,191,36,0.7)' : '#b45309' }}>
+              {t.upgradeToAdd(PLAN_CONFIGS[nextPlan].name.fr)}
+            </p>
           </div>
         </div>
       )}
@@ -518,66 +382,64 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
       {/* Progress bar */}
       {maxProducts && (
         <div className="mb-6">
-          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+          <div className="flex justify-between text-xs font-medium mb-1.5" style={{ color: txtSub }}>
             <span>{products.length} produits</span>
             <span>{maxProducts} max</span>
           </div>
-          <div className="w-full bg-gray-800 rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full transition-all ${
-                products.length >= maxProducts ? 'bg-red-500' :
-                products.length >= maxProducts * 0.8 ? 'bg-amber-500' : 'bg-blue-500'
-              }`}
-              style={{ width: `${Math.min((products.length / maxProducts) * 100, 100)}%` }}
-            />
+          <div className="w-full rounded-full h-1.5" style={{ background: surfaceAlt }}>
+            <div className="h-1.5 rounded-full transition-all" style={{ width: `${progressPct}%`, background: progressColor }} />
           </div>
         </div>
       )}
 
       {/* Products grid */}
       {products.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <Package size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm">{t.noProducts}</p>
+        <div className="text-center py-16 rounded-3xl" style={{ background: surfaceAlt, border: `1px dashed ${border}` }}>
+          <Package size={40} className="mx-auto mb-3 opacity-40" style={{ color: txtSub }} />
+          <p className="text-sm font-medium" style={{ color: txtSub }}>{t.noProducts}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {products.map(product => (
-            <div key={product.id} className="bg-gray-800/60 border border-gray-700/50 rounded-2xl overflow-hidden hover:border-gray-600 transition-all group">
+            <div key={product.id} className="rounded-3xl overflow-hidden transition-all group hover:-translate-y-1"
+              style={{ background: surface, border: `1px solid ${border}`, boxShadow: dk ? 'none' : '0 2px 16px rgba(108,99,255,0.06)' }}>
               {/* Image */}
-              <div className="h-40 bg-gray-700 relative overflow-hidden">
+              <div className="h-40 relative overflow-hidden" style={{ background: surfaceAlt }}>
                 {product.image_url ? (
                   <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <ShoppingBag size={32} className="text-gray-600" />
+                    <ShoppingBag size={32} style={{ color: txtSub }} />
                   </div>
                 )}
-                <div className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  product.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-600/50 text-gray-400'
-                }`}>
-                  {product.is_active ? t.active : t.inactive}
-                </div>
+                {product.images?.length > 1 && (
+                  <span className="absolute bottom-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+                    style={{ background: 'rgba(0,0,0,0.5)' }}>
+                    +{product.images.length - 1}
+                  </span>
+                )}
+                <span className="absolute top-3 right-3 text-[10px] font-bold px-2.5 py-1 rounded-full"
+                  style={product.quantity > 0
+                    ? { background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }
+                    : { background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                  {product.quantity > 0 ? `${t.inStock} (${product.quantity})` : t.outOfStock}
+                </span>
               </div>
               {/* Info */}
               <div className="p-4">
-                <h3 className="text-white font-semibold text-sm truncate">{product.name}</h3>
-                <p className="text-gray-400 text-xs mt-0.5 line-clamp-2">{product.description}</p>
+                <h3 className="font-bold text-sm truncate" style={{ color: txtPrim }}>{product.name}</h3>
+                <p className="text-xs mt-0.5 line-clamp-2" style={{ color: txtSub }}>{product.description}</p>
                 <div className="flex items-center justify-between mt-3">
-                  <span className="text-blue-400 font-bold text-sm">
+                  <span className="font-black text-sm" style={{ color: '#6C63FF' }}>
                     {product.price.toLocaleString()} {product.currency}
                   </span>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => openEdit(product)}
-                      className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition"
-                    >
+                    <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg transition"
+                      style={{ color: txtSub, background: surfaceAlt }}>
                       <Edit2 size={14} />
                     </button>
-                    <button
-                      onClick={() => openDelete(product.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-                    >
+                    <button onClick={() => setDeleteId(product.id)} className="p-1.5 rounded-lg transition"
+                      style={{ color: '#FF6B9D', background: dk ? 'rgba(255,107,157,0.1)' : '#fff1f6' }}>
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -588,145 +450,21 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
         </div>
       )}
 
-      {/* Modal Add / Edit */}
-      {(modal === 'add' || modal === 'edit') && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-gray-800">
-              <h3 className="text-white font-bold">{modal === 'add' ? t.addProduct : t.editProduct}</h3>
-              <button onClick={() => setModal(null)} className="text-gray-400 hover:text-white"><X size={20} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-gray-300 text-sm mb-1.5">{t.productName}</label>
-                <input
-                  type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-300 text-sm mb-1.5">{t.productDesc}</label>
-                <textarea
-                  value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={2}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
-                />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-gray-300 text-sm mb-1.5">{t.productPrice}</label>
-                  <input
-                    type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div className="w-28">
-                  <label className="block text-gray-300 text-sm mb-1.5">{t.currency}</label>
-                  <select
-                    value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="FCFA">FCFA</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* SECTION ZONE DE TELEVERSEMENT D'IMAGE UNIQUE */}
-              <div>
-                <label className="block text-gray-300 text-sm mb-1.5">{t.productImage}</label>
-                
-                {/* Input caché, déclenché par clic sur le conteneur personnalisé */}
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-
-                {form.image_url ? (
-                  // Aperçu si l'image existe déjà ou vient d'être uploadée
-                  <div className="relative group border border-gray-700 rounded-xl overflow-hidden bg-gray-800 h-36 flex items-center justify-center">
-                    <img src={form.image_url} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-200">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploading}
-                        className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold text-xs px-3 py-2 rounded-lg border border-white/20 transition"
-                      >
-                        <Edit2 size={12} />
-                        {lang === 'fr' ? 'Changer l\'image' : 'Change Image'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // Zone de dépôt si aucune image n'est liée
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                    className="w-full border-2 border-dashed border-gray-700 hover:border-gray-500 bg-gray-800/40 hover:bg-gray-800/80 rounded-xl p-6 flex flex-col items-center justify-center gap-2 group transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {uploading ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <Loader2 size={24} className="text-blue-500 animate-spin" />
-                        <span className="text-xs text-gray-400 font-medium">{lang === 'fr' ? 'Envoi de l\'image...' : 'Uploading image...'}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="w-10 h-10 bg-gray-800 border border-gray-700 group-hover:border-gray-600 rounded-xl flex items-center justify-center transition-colors">
-                          <Upload size={16} className="text-gray-400 group-hover:text-gray-200" />
-                        </div>
-                        <div>
-                          <p className="text-gray-200 text-xs font-semibold">{lang === 'fr' ? 'Sélectionner une photo' : 'Select a photo'}</p>
-                          <p className="text-[11px] text-gray-500 mt-0.5">PNG, JPG ou WEBP</p>
-                        </div>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${form.is_active ? 'bg-blue-600' : 'bg-gray-600'}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-5.5 left-0.5' : 'left-0.5'}`} style={{ transform: form.is_active ? 'translateX(20px)' : 'translateX(0)' }} />
-                </button>
-                <span className="text-gray-300 text-sm">{form.is_active ? t.active : t.inactive}</span>
-              </div>
-            </div>
-            <div className="flex gap-3 p-6 border-t border-gray-800">
-              <button onClick={() => setModal(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-xl transition">{t.cancel}</button>
-              <button
-                onClick={handleSave}
-                disabled={saving || uploading || !form.name}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
-              >
-                {saving ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></> : <Check size={16} />}
-                {t.save}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Delete modal */}
-      {modal === 'delete' && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
-            <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Trash2 size={20} className="text-red-400" />
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center" style={{ background: surface }}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ background: dk ? 'rgba(255,107,157,0.12)' : '#fff1f6' }}>
+              <Trash2 size={20} style={{ color: '#FF6B9D' }} />
             </div>
-            <h3 className="text-white font-bold mb-2">{t.confirmDelete}</h3>
+            <h3 className="font-bold mb-2" style={{ color: txtPrim }}>{t.confirmDelete}</h3>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setModal(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium py-2.5 rounded-xl transition">{t.cancel}</button>
-              <button onClick={handleDelete} disabled={saving} className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition">
+              <button onClick={() => setDeleteId(null)} className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition"
+                style={{ background: surfaceAlt, color: txtSub }}>{t.cancel}</button>
+              <button onClick={handleDelete} disabled={saving}
+                className="flex-1 text-white text-sm font-bold py-2.5 rounded-xl transition disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#FF6B9D,#e94f85)' }}>
                 {saving ? '...' : t.deleteProduct}
               </button>
             </div>

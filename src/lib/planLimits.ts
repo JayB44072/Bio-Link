@@ -5,11 +5,14 @@ export interface PlanConfig {
   price_fcfa: number;
   price_usd: number;
   max_products: number | null;
+  max_services: number | null;
   max_social_links: number | null;
   custom_themes: boolean;
+  shop_logo: boolean;
   statistics_access: boolean;
   priority_withdrawal: boolean;
-  white_label: boolean;
+  map_access: boolean;
+  commission_rate: number;
 }
 
 export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
@@ -18,49 +21,67 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     price_fcfa: 0,
     price_usd: 0,
     max_products: 10,
+    max_services: 5,
     max_social_links: 2,
     custom_themes: false,
+    shop_logo: false,
     statistics_access: false,
     priority_withdrawal: false,
-    white_label: false,
+    map_access: false,
+    commission_rate: 0.05,
   },
   starter: {
     name: { fr: 'Starter', en: 'Starter' },
     price_fcfa: 2000,
     price_usd: 3.50,
     max_products: 20,
+    max_services: 15,
     max_social_links: null,
     custom_themes: true,
+    shop_logo: true,
     statistics_access: false,
     priority_withdrawal: false,
-    white_label: true,
+    map_access: false,
+    commission_rate: 0.04,
   },
   business: {
     name: { fr: 'Business', en: 'Business' },
     price_fcfa: 5000,
     price_usd: 8.50,
     max_products: 35,
+    max_services: 30,
     max_social_links: null,
     custom_themes: true,
+    shop_logo: true,
     statistics_access: true,
     priority_withdrawal: false,
-    white_label: true,
+    map_access: true,
+    commission_rate: 0.03,
   },
   premium: {
     name: { fr: 'Premium', en: 'Premium' },
     price_fcfa: 10000,
     price_usd: 16.50,
     max_products: null,
+    max_services: null,
     max_social_links: null,
     custom_themes: true,
+    shop_logo: true,
     statistics_access: true,
     priority_withdrawal: true,
-    white_label: true,
+    map_access: true,
+    commission_rate: 0.02,
   },
 };
 
 export function canAddProduct(plan: PlanType, currentCount: number): boolean {
   const limit = PLAN_CONFIGS[plan].max_products;
+  if (limit === null) return true;
+  return currentCount < limit;
+}
+
+export function canAddService(plan: PlanType, currentCount: number): boolean {
+  const limit = PLAN_CONFIGS[plan].max_services;
   if (limit === null) return true;
   return currentCount < limit;
 }
@@ -96,5 +117,3 @@ export const SOCIAL_PLATFORMS = [
   { id: 'telegram', label: 'Telegram', icon: 'Send' },
   { id: 'website', label: 'Site Web', icon: 'Globe' },
 ];
-
-export const COMMISSION_RATE = 0.05;
