@@ -5,7 +5,7 @@ import { useAppPrefs } from '../../lib/AppPrefsContext';
 import { PLAN_CONFIGS } from '../../lib/planLimits';
 import { LandingLang } from '../../lib/landingTranslations';
 import { supabase } from '../../lib/supabase';
-import PurchaseModal from './PurchaseModal';
+import PurchaseModal, { CartItem } from './PurchaseModal';
 import ProductDetailPage from './ProductDetailPage';
 import ProductsMap from '../ui/ProductsMap';
 import {
@@ -54,15 +54,6 @@ function buildSocialUrl(platform: string, value: string): string {
     case 'website': return `https://${v}`;
     default: return v;
   }
-}
-
-interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  image_url: string;
-  qty: number;
 }
 
 interface PublicProfileViewProps {
@@ -311,6 +302,7 @@ export default function PublicProfileView({ profile, products, services, interac
       <PurchaseModal
         product={checkoutItem}
         seller={profile as Profile}
+        cartItems={checkoutSource === 'cart' ? cart : undefined}
         onSuccess={handleOrderSuccess}
         onClose={() => { setCheckoutItem(null); setCheckoutSource(null); }}
       />

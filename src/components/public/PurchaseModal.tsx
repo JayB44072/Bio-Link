@@ -11,13 +11,20 @@ import {
   Package, Link2, Store, Lock, RotateCcw, Truck, Sun, Moon, Globe,
 } from 'lucide-react';
 
+export interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  image_url: string;
+  qty: number;
+}
+
 interface PurchaseModalProps {
   product: Product;
   seller: Profile;
+  cartItems?: CartItem[];
   onClose: () => void;
-  /** Appelé une fois la commande validée (paiement confirmé), avant l'écran de succès.
-   * Sert à décrémenter le vrai stock en base (visible dans le tableau de bord et pour
-   * les autres visiteurs) — jusque-là la baisse de quantité n'était que locale/visuelle. */
   onSuccess?: () => void;
 }
 
@@ -28,7 +35,7 @@ const LANG_OPTIONS: { code: LandingLang; label: string }[] = [
   { code: 'de', label: '🇩🇪 Deutsch'   },
 ];
 
-export default function PurchaseModal({ product, seller, onClose, onSuccess }: PurchaseModalProps) {
+export default function PurchaseModal({ product, seller, cartItems, onClose, onSuccess }: PurchaseModalProps) {
   const { t } = useLang();
   const { isDark: dk, toggleDark, lang, setLang } = useAppPrefs();
   const [name, setName] = useState('');
@@ -120,8 +127,12 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
       }).select().maybeSingle();
       if (txErr) throw txErr;
 
-      // Notification in-app pour le vendeur
-      await supabase.from('notifications').insert({
+      onSuccess?.();
+      setOrderId(tx?.id ?? null);
+      setSuccess(true);
+
+      // Notifications (fire-and-forget, ne bloquent jamais le paiement)
+      supabase.from('notifications').insert({
         user_id: seller.user_id,
         type: 'order',
         title: lang === 'fr' ? 'Nouvelle commande !' : 'New order!',
@@ -129,9 +140,8 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
           ? `${name} a commandé "${product.name}" pour ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`
           : `${name} ordered "${product.name}" for ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`,
         metadata: { order_id: tx?.id, product_name: product.name, amount: totalAmount, currency: product.currency, buyer_name: name },
-      }).catch(() => {});
+      }).then(() => {}).catch(() => {});
 
-      // Notification email au vendeur (via Edge Function)
       supabase.functions.invoke('send-order-email', {
         body: {
           seller_id: seller.user_id,
@@ -143,77 +153,171 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
           order_id: tx?.id,
         },
       }).catch(() => {});
-
-      onSuccess?.();
-      setOrderId(tx?.id ?? null);
-      setSuccess(true);
-    } catch {
-      setError(t.error);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || t.error;
+      console.error('[BioLinkWD] Erreur paiement:', err);
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
   }
 
   function downloadInvoice() {
+    const invoiceNum = orderId ? orderId.slice(0, 8).toUpperCase() : '00000000';
+    const dateStr = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
     const html = `
-<!doctype html><html><head><meta charset="utf-8"><title>Facture BioLinkWD</title>
+<!doctype html><html><head><meta charset="utf-8"><title>Facture #${invoiceNum} — BioLinkWD</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f3ff; padding: 40px 20px; color: #16162e; }
-  .invoice { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 10px 40px rgba(108,99,255,0.12); }
-  .header { background: linear-gradient(135deg,#6C63FF 0%,#8B5FBF 55%,#FF6B9D 120%); padding: 36px 32px; text-align: center; color: #fff; }
-  .header h1 { margin: 0; font-size: 22px; font-weight: 900; }
-  .header p { margin: 4px 0 0; font-size: 12px; opacity: .85; font-weight: 600; }
-  .body { padding: 32px; }
-  .badge { display:inline-block; background:#f5f3ff; color:#6C63FF; font-size:11px; font-weight:800; padding:6px 14px; border-radius:999px; margin-bottom:18px; }
-  .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #8a87a3; margin: 24px 0 10px; text-align:center; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 11px 4px; border-bottom: 1px solid #f0eefb; font-size: 14px; text-align: center; }
-  td.label { color: #8a87a3; font-weight: 600; width: 45%; }
-  td.value { color: #16162e; font-weight: 700; }
-  .total-box { margin-top: 24px; background: linear-gradient(135deg,#f5f3ff,#fdf1f6); border-radius: 16px; padding: 20px; text-align: center; }
-  .total-box .label { font-size: 12px; color: #8a87a3; font-weight: 700; text-transform: uppercase; }
-  .total-box .amount { font-size: 30px; font-weight: 900; color: #6C63FF; margin-top: 4px; }
-  .footer { text-align: center; padding: 24px 32px 32px; color: #8a87a3; font-size: 11px; }
-  .footer b { color: #FF6B9D; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #f0eef8; padding: 32px 16px; color: #1a1a2e; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(108,99,255,0.08); }
+
+  /* ── Header ── */
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 36px 36px 28px; border-bottom: 2px solid #f0eefb; }
+  .hdr-left { }
+  .logo { font-size: 22px; font-weight: 900; color: #1a1a2e; letter-spacing: -0.5px; }
+  .logo span { color: #6C63FF; }
+  .logo-sub { font-size: 10px; font-weight: 700; color: #FF6B9D; letter-spacing: 0.5px; margin-top: 2px; }
+  .hdr-right { text-align: right; }
+  .inv-label { font-size: 28px; font-weight: 900; color: #6C63FF; letter-spacing: -1px; }
+  .inv-num { font-size: 12px; font-weight: 700; color: #8a87a3; margin-top: 2px; }
+  .inv-date { font-size: 11px; color: #b0aec6; margin-top: 4px; }
+
+  /* ── Parties ── */
+  .parties { display: flex; gap: 24px; padding: 28px 36px; background: #faf9ff; }
+  .party { flex: 1; }
+  .party-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: #6C63FF; margin-bottom: 8px; }
+  .party-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .party-detail { font-size: 12px; color: #8a87a3; margin-top: 3px; line-height: 1.5; }
+
+  /* ── Tableau commande ── */
+  .items { padding: 0 36px; }
+  .items table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+  .items thead th { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #8a87a3; padding: 0 0 10px; border-bottom: 2px solid #f0eefb; }
+  .items thead th:first-child { text-align: left; }
+  .items thead th:last-child, .items thead th:nth-child(2), .items thead th:nth-child(3) { text-align: right; }
+  .items tbody td { padding: 16px 0; border-bottom: 1px solid #f5f4fa; font-size: 13px; }
+  .items tbody td:first-child { text-align: left; font-weight: 700; color: #1a1a2e; }
+  .items tbody td:nth-child(2) { text-align: right; color: #8a87a3; font-weight: 600; }
+  .items tbody td:nth-child(3) { text-align: right; color: #8a87a3; font-weight: 600; }
+  .items tbody td:last-child { text-align: right; font-weight: 800; color: #1a1a2e; }
+
+  /* ── Totaux ── */
+  .totals { padding: 20px 36px 0; display: flex; justify-content: flex-end; }
+  .totals-box { width: 260px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; }
+  .totals-row .lbl { color: #8a87a3; font-weight: 600; }
+  .totals-row .val { color: #1a1a2e; font-weight: 700; }
+  .totals-row.grand { margin-top: 8px; padding-top: 14px; border-top: 2px solid #6C63FF; }
+  .totals-row.grand .lbl { font-size: 14px; font-weight: 800; color: #1a1a2e; }
+  .totals-row.grand .val { font-size: 20px; font-weight: 900; color: #6C63FF; }
+
+  /* ── Paiement ── */
+  .payment { margin: 28px 36px 0; padding: 16px 20px; background: #f5f3ff; border-radius: 12px; display: flex; align-items: center; gap: 12px; }
+  .pay-icon { width: 36px; height: 36px; background: #6C63FF; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; font-weight: 900; }
+  .pay-info { }
+  .pay-method { font-size: 12px; font-weight: 700; color: #1a1a2e; }
+  .pay-status { font-size: 11px; color: #22c55e; font-weight: 700; margin-top: 1px; }
+
+  /* ── Footer ── */
+  .ftr { padding: 28px 36px; margin-top: 28px; border-top: 1px solid #f0eefb; text-align: center; }
+  .ftr p { font-size: 11px; color: #b0aec6; line-height: 1.6; }
+  .ftr .brand { font-weight: 800; color: #6C63FF; }
+  .ftr .pink { color: #FF6B9D; font-weight: 700; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .page { box-shadow: none; border-radius: 0; }
+  }
 </style></head>
 <body>
-  <div class="invoice">
-    <div class="header">
-      <h1>BioLinkWD</h1>
-      <p>by WhiteDuckSaaS</p>
-    </div>
-    <div class="body" style="text-align:center">
-      <span class="badge">FACTURE ${orderId ? '#' + orderId.slice(0, 8).toUpperCase() : ''}</span>
-      <p style="color:#8a87a3;font-size:12px;margin:0 0 8px">${new Date().toLocaleDateString()}</p>
-
-      <div class="section-title">Vendeur</div>
-      <table>
-        <tr><td class="label">Boutique</td><td class="value">${shopDisplayName}</td></tr>
-        <tr><td class="label">Nom d'utilisateur</td><td class="value">@${seller.username}</td></tr>
-      </table>
-
-      <div class="section-title">Client</div>
-      <table>
-        <tr><td class="label">Nom</td><td class="value">${name}</td></tr>
-        <tr><td class="label">Téléphone</td><td class="value">${phone || '—'}</td></tr>
-      </table>
-
-      <div class="section-title">Commande</div>
-      <table>
-        <tr><td class="label">Produit</td><td class="value">${product.name}</td></tr>
-        <tr><td class="label">Prix unitaire</td><td class="value">${unitPrice.toLocaleString()} ${product.currency}</td></tr>
-        <tr><td class="label">Quantité</td><td class="value">${qty}</td></tr>
-        <tr><td class="label">Moyen de paiement</td><td class="value">${method.toUpperCase()}</td></tr>
-      </table>
-
-      <div class="total-box">
-        <div class="label">Montant total</div>
-        <div class="amount">${totalAmount.toLocaleString()} ${product.currency}</div>
+  <div class="page">
+    <div class="hdr">
+      <div class="hdr-left">
+        <div class="logo">BioLink<span>WD</span></div>
+        <div class="logo-sub">by WhiteDuckSaaS</div>
+      </div>
+      <div class="hdr-right">
+        <div class="inv-label">FACTURE</div>
+        <div class="inv-num">#${invoiceNum}</div>
+        <div class="inv-date">${dateStr}</div>
       </div>
     </div>
-    <div class="footer">
-      Merci pour votre confiance — <b>BioLinkWD</b> · propulsé par <b>WhiteDuckSaaS</b>
+
+    <div class="parties">
+      <div class="party">
+        <div class="party-label">Vendeur</div>
+        <div class="party-name">${shopDisplayName}</div>
+        <div class="party-detail">@${seller.username}</div>
+      </div>
+      <div class="party">
+        <div class="party-label">Client</div>
+        <div class="party-name">${name}</div>
+        <div class="party-detail">${phone || '—'}</div>
+        ${deliveryLocation.address ? `<div class="party-detail">${deliveryLocation.address}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="items">
+      <table>
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Prix unitaire</th>
+            <th>Qté</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cartItems && cartItems.length > 0
+            ? cartItems.map(ci => `<tr>
+                <td>${ci.name}</td>
+                <td>${ci.price.toLocaleString()} ${ci.currency}</td>
+                <td>${ci.qty}</td>
+                <td>${(ci.price * ci.qty).toLocaleString()} ${ci.currency}</td>
+              </tr>`).join('')
+            : `<tr>
+                <td>${product.name}</td>
+                <td>${unitPrice.toLocaleString()} ${product.currency}</td>
+                <td>${qty}</td>
+                <td>${totalAmount.toLocaleString()} ${product.currency}</td>
+              </tr>`
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="totals">
+      <div class="totals-box">
+        <div class="totals-row">
+          <span class="lbl">Sous-total</span>
+          <span class="val">${totalAmount.toLocaleString()} ${product.currency}</span>
+        </div>
+        <div class="totals-row">
+          <span class="lbl">Livraison</span>
+          <span class="val">—</span>
+        </div>
+        <div class="totals-row grand">
+          <span class="lbl">Total</span>
+          <span class="val">${totalAmount.toLocaleString()} ${product.currency}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="payment">
+      <div class="pay-icon">${method === 'card' ? '💳' : '📱'}</div>
+      <div class="pay-info">
+        <div class="pay-method">Payé via ${method === 'card' ? 'Carte bancaire' : method === 'mtn' ? 'MTN Mobile Money' : 'Orange Money'}</div>
+        <div class="pay-status">&#10003; Paiement confirmé</div>
+      </div>
+    </div>
+
+    <div class="ftr">
+      <p>
+        Merci pour votre confiance.<br>
+        <span class="brand">BioLinkWD</span> · propulsé par <span class="pink">WhiteDuckSaaS</span>
+      </p>
     </div>
   </div>
 </body></html>`;
@@ -221,7 +325,7 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facture-biolinkwd-${orderId?.slice(0, 8) || 'commande'}.html`;
+    a.download = `facture-${invoiceNum}.html`;
     a.click();
     URL.revokeObjectURL(url);
   }
