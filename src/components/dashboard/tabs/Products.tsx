@@ -321,6 +321,17 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
               isDark={dk}
             />
 
+            {/* Info commission */}
+            <div className="flex items-start gap-2.5 rounded-2xl p-3.5"
+              style={{ background: dk ? 'rgba(251,191,36,0.08)' : '#fffbeb', border: '1px solid rgba(251,191,36,0.3)' }}>
+              <span className="text-amber-500 shrink-0 mt-0.5">ℹ</span>
+              <p className="text-xs leading-relaxed" style={{ color: dk ? 'rgba(251,191,36,0.85)' : '#92400e' }}>
+                {lang === 'fr'
+                  ? `Des frais de ${Math.round(planConfig.commission_rate * 100)}% sont prélevés sur chaque vente lors de la confirmation de livraison. Ces frais sont utilisés pour sécuriser les échanges monétaires entre le client et vous.`
+                  : `A ${Math.round(planConfig.commission_rate * 100)}% fee is deducted from each sale upon delivery confirmation. These fees secure monetary exchanges between the buyer and you.`}
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-3">
               <button onClick={closeForm} className="flex-1 text-sm font-semibold py-3 rounded-xl transition"
                 style={{ background: surfaceAlt, color: txtSub }}>{t.cancel}</button>

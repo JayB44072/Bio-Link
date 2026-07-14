@@ -353,6 +353,11 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
                       <p className="text-sm font-bold" style={{ color: isPaidOut ? '#22c55e' : txtSub }}>
                         {isPaidOut ? '+' : ''}{tx.seller_amount.toLocaleString()} FCFA
                       </p>
+                      {isPaidOut && tx.platform_fee > 0 && (
+                        <p className="text-[10px] font-semibold" style={{ color: txtSub }}>
+                          Frais: -{tx.platform_fee.toLocaleString()} FCFA
+                        </p>
+                      )}
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ background: st.bg, color: st.text }}>
                         {ORDER_STATUS_LABEL[tx.status] ?? tx.status}
                       </span>

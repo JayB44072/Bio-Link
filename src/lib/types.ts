@@ -81,6 +81,7 @@ export interface Transaction {
   buyer_email: string;
   buyer_phone: string;
   amount: number;
+  quantity: number;
   platform_fee: number;
   seller_amount: number;
   payment_method: PaymentMethod;

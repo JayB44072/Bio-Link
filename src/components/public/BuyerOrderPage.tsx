@@ -35,11 +35,14 @@ export default function BuyerOrderPage({ orderId }: BuyerOrderPageProps) {
     if (!order || !seller) return;
     setConfirming(true);
 
-    const newBalance = (seller.wallet_balance || 0) + order.seller_amount;
+    // Deduct platform commission now that delivery is confirmed (escrow release)
+    const actualSellerAmount = Math.round((order.amount - (order.platform_fee || 0)) * 100) / 100;
+    const newBalance = (seller.wallet_balance || 0) + actualSellerAmount;
     await supabase.from('profiles').update({ wallet_balance: newBalance }).eq('user_id', seller.user_id);
     await supabase.from('transactions').update({
       status: 'completed',
       delivery_confirmed_at: new Date().toISOString(),
+      seller_amount: actualSellerAmount,
     }).eq('id', order.id);
 
     setOrder(prev => prev ? { ...prev, status: 'completed', delivery_confirmed_at: new Date().toISOString() } : prev);

@@ -40,6 +40,7 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [activeImg, setActiveImg] = useState(0);
+  const [qty, setQty] = useState(1);
   const [deliveryLocation, setDeliveryLocation] = useState<LocationValue>({ address: '', lat: null, lng: null });
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
@@ -58,8 +59,12 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
   }, []);
 
   const commissionRate = PLAN_CONFIGS[seller.plan_type]?.commission_rate ?? 0.05;
-  const fee = Math.round(product.price * commissionRate * 100) / 100;
-  const sellerAmount = Math.round((product.price - fee) * 100) / 100;
+  const unitPrice = product.price;
+  const totalAmount = Math.round(unitPrice * qty * 100) / 100;
+  // fee and sellerAmount are NOT shown to buyer; computed here only for storing in DB
+  // Actual deduction happens in BuyerOrderPage.confirmDelivery()
+  const fee = Math.round(totalAmount * commissionRate * 100) / 100;
+  const sellerAmount = Math.round((totalAmount - fee) * 100) / 100;
   const gallery = product.images?.length ? product.images : (product.image_url ? [product.image_url] : []);
   const shopDisplayName = seller.shop_name || seller.display_name || seller.username || 'Boutique';
   const isSyntheticCart = product.id === 'cart-checkout';
@@ -103,9 +108,10 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
         buyer_name: name,
         buyer_email: method === 'card' ? email : undefined,
         buyer_phone: phone,
-        amount: product.price,
+        amount: totalAmount,
         platform_fee: fee,
         seller_amount: sellerAmount,
+        quantity: qty,
         payment_method: method,
         status: 'pending',
         currency: product.currency,
@@ -173,13 +179,14 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
       <div class="section-title">Commande</div>
       <table>
         <tr><td class="label">Produit</td><td class="value">${product.name}</td></tr>
-        <tr><td class="label">Quantité</td><td class="value">${product.quantity ?? 1}</td></tr>
+        <tr><td class="label">Prix unitaire</td><td class="value">${unitPrice.toLocaleString()} ${product.currency}</td></tr>
+        <tr><td class="label">Quantité</td><td class="value">${qty}</td></tr>
         <tr><td class="label">Moyen de paiement</td><td class="value">${method.toUpperCase()}</td></tr>
       </table>
 
       <div class="total-box">
         <div class="label">Montant total</div>
-        <div class="amount">${product.price.toLocaleString()} ${product.currency}</div>
+        <div class="amount">${totalAmount.toLocaleString()} ${product.currency}</div>
       </div>
     </div>
     <div class="footer">
@@ -253,7 +260,7 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
             Via {method.toUpperCase()}
           </div>
           <p className="font-black text-3xl mb-5 tracking-tight" style={{ color: txtPrim }}>
-            {product.price.toLocaleString()} <span className="text-sm font-bold">{product.currency}</span>
+            {totalAmount.toLocaleString()} <span className="text-sm font-bold">{product.currency}</span>
           </p>
 
           <div className="rounded-2xl p-4 mb-4 text-left" style={{ background: dk ? 'rgba(59,130,246,0.1)' : '#eff6ff', border: `1px solid ${dk ? 'rgba(59,130,246,0.25)' : '#dbeafe'}` }}>
@@ -347,16 +354,44 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
                 </div>
               )}
 
-              <div className="text-center mb-5">
-                <p className="font-black text-lg" style={{ color: txtPrim }}>{product.name}</p>
-                {product.description && <p className="text-xs mt-1 leading-relaxed" style={{ color: txtSub }}>{product.description}</p>}
-                <p className="font-black text-2xl mt-2 tracking-tight" style={{ color: txtPrim }}>
-                  {product.price.toLocaleString()} <span className="text-sm font-bold">{product.currency}</span>
-                </p>
+              <div className="mb-5">
+                <p className="font-black text-lg text-center" style={{ color: txtPrim }}>{product.name}</p>
+                {product.description && <p className="text-xs mt-1 leading-relaxed text-center" style={{ color: txtSub }}>{product.description}</p>}
+
+                {/* Prix unitaire */}
+                <div className="flex items-center justify-between mt-3 px-1">
+                  <span className="text-xs font-semibold" style={{ color: txtSub }}>{lang === 'fr' ? 'Prix unitaire' : 'Unit price'}</span>
+                  <span className="font-bold text-sm" style={{ color: txtPrim }}>{unitPrice.toLocaleString()} {product.currency}</span>
+                </div>
+
+                {/* Sélecteur quantité */}
                 {!isSyntheticCart && (
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full mt-2">
-                    <Package size={11} />{lang === 'fr' ? `${product.quantity} disponible(s)` : `${product.quantity} available`}
-                  </span>
+                  <div className="flex items-center justify-between mt-2 px-1">
+                    <span className="text-xs font-semibold" style={{ color: txtSub }}>{lang === 'fr' ? 'Quantité' : 'Quantity'}</span>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold transition"
+                        style={{ background: surfaceAlt, border: `1px solid ${border}`, color: txtPrim }}>−</button>
+                      <span className="w-8 text-center text-sm font-bold" style={{ color: txtPrim }}>{qty}</span>
+                      <button type="button" onClick={() => setQty(q => Math.min(product.quantity ?? 99, q + 1))}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold transition"
+                        style={{ background: surfaceAlt, border: `1px solid ${border}`, color: txtPrim }}>+</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Total */}
+                <div className="flex items-center justify-between mt-3 px-1 pt-3" style={{ borderTop: `1px solid ${border}` }}>
+                  <span className="text-xs font-bold uppercase tracking-wide" style={{ color: txtLabel }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
+                  <span className="font-black text-xl tracking-tight" style={{ color: '#6C63FF' }}>{totalAmount.toLocaleString()} {product.currency}</span>
+                </div>
+
+                {!isSyntheticCart && (
+                  <div className="text-center mt-2">
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+                      <Package size={11} />{lang === 'fr' ? `${product.quantity} disponible(s)` : `${product.quantity} available`}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -488,7 +523,7 @@ export default function PurchaseModal({ product, seller, onClose, onSuccess }: P
                     </>
                   ) : (
                     <span>
-                      {lang === 'fr' ? 'Confirmer le paiement' : t.pay} · {product.price.toLocaleString()} {product.currency}
+                      {lang === 'fr' ? 'Confirmer le paiement' : t.pay} · {totalAmount.toLocaleString()} {product.currency}
                     </span>
                   )}
                 </button>
