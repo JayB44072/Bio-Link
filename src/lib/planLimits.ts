@@ -92,8 +92,154 @@ export function getNextPlan(plan: PlanType): PlanType | null {
   return idx < order.length - 1 ? order[idx + 1] : null;
 }
 
+export interface ShopThemeConfig {
+  /** Page background (CSS value) */
+  pageBg: string;
+  /** Page background for light mode override — if null, pageBg is used regardless */
+  pageBgLight: string | null;
+  /** Card background */
+  cardBg: string;
+  cardBgLight: string | null;
+  /** Card border color */
+  cardBorder: string;
+  cardBorderLight: string | null;
+  /** Primary text */
+  textColor: string;
+  textColorLight: string | null;
+  /** Secondary/muted text */
+  subtextColor: string;
+  subtextColorLight: string | null;
+  /** Price color */
+  priceColor: string;
+  /** Button gradient */
+  buttonGradient: string;
+  /** Product image shape: 'square' | 'rounded-xl' | 'rounded-full' */
+  imageRadius: string;
+  /** Grid cols class */
+  gridCols: string;
+  /** Card border radius */
+  cardRadius: string;
+  /** Card shadow */
+  cardShadow: string;
+  /** Header bg */
+  headerBg: string;
+  headerBgLight: string | null;
+  /** Whether this theme is inherently dark (disables light/dark toggle impact) */
+  inherentlyDark: boolean;
+}
+
+const defaultShop: ShopThemeConfig = {
+  pageBg: '#0b0b1e', pageBgLight: '#fbfaff',
+  cardBg: '#12122b', cardBgLight: '#ffffff',
+  cardBorder: 'rgba(139,124,255,0.16)', cardBorderLight: 'rgba(229,231,235,0.8)',
+  textColor: '#f2f1ff', textColorLight: '#111827',
+  subtextColor: '#8c8ab0', subtextColorLight: '#6b7280',
+  priceColor: '#34d399',
+  buttonGradient: 'linear-gradient(135deg,#6C63FF,#00C2FF)',
+  imageRadius: 'rounded-none', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+  cardRadius: 'rounded-xl', cardShadow: '',
+  headerBg: 'rgba(13,13,34,0.9)', headerBgLight: 'rgba(255,255,255,0.95)',
+  inherentlyDark: false,
+};
+
+export const SHOP_THEMES: Record<string, ShopThemeConfig> = {
+  default: defaultShop,
+
+  /* ── Elegance: white bg, clean minimal cards, 4-col, subtle shadows, serif feel ── */
+  elegance: {
+    pageBg: '#faf9f6', pageBgLight: null,
+    cardBg: '#ffffff', cardBgLight: null,
+    cardBorder: 'rgba(0,0,0,0.06)', cardBorderLight: null,
+    textColor: '#1a1a1a', textColorLight: null,
+    subtextColor: '#888888', subtextColorLight: null,
+    priceColor: '#1a1a1a',
+    buttonGradient: 'linear-gradient(135deg,#1a1a1a,#333333)',
+    imageRadius: 'rounded-none', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-lg', cardShadow: '0 1px 8px rgba(0,0,0,0.06)',
+    headerBg: 'rgba(250,249,246,0.95)', headerBgLight: null,
+    inherentlyDark: false,
+  },
+
+  /* ── Modern: warm cream bg, large rounded cards, bold ── */
+  modern: {
+    pageBg: '#FFF8F0', pageBgLight: null,
+    cardBg: '#ffffff', cardBgLight: null,
+    cardBorder: 'rgba(0,0,0,0.05)', cardBorderLight: null,
+    textColor: '#2d2d2d', textColorLight: null,
+    subtextColor: '#999999', subtextColorLight: null,
+    priceColor: '#e85d3a',
+    buttonGradient: 'linear-gradient(135deg,#e85d3a,#ff8a5c)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    cardRadius: 'rounded-3xl', cardShadow: '0 4px 20px rgba(0,0,0,0.06)',
+    headerBg: 'rgba(255,248,240,0.95)', headerBgLight: null,
+    inherentlyDark: false,
+  },
+
+  /* ── Luxury: black bg, gold accents, circular product images ── */
+  luxury: {
+    pageBg: '#0a0a0a', pageBgLight: null,
+    cardBg: '#141414', cardBgLight: null,
+    cardBorder: 'rgba(201,169,110,0.2)', cardBorderLight: null,
+    textColor: '#f5f0e8', textColorLight: null,
+    subtextColor: '#8a8070', subtextColorLight: null,
+    priceColor: '#C9A96E',
+    buttonGradient: 'linear-gradient(135deg,#C9A96E,#a8894e)',
+    imageRadius: 'rounded-full', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-2xl', cardShadow: '0 4px 24px rgba(0,0,0,0.4)',
+    headerBg: 'rgba(10,10,10,0.95)', headerBgLight: null,
+    inherentlyDark: true,
+  },
+
+  /* ── Neon: dark bg with vibrant neon glow ── */
+  neon: {
+    pageBg: '#0d0d1a', pageBgLight: null,
+    cardBg: '#13132a', cardBgLight: null,
+    cardBorder: 'rgba(0,255,136,0.15)', cardBorderLight: null,
+    textColor: '#e0ffe0', textColorLight: null,
+    subtextColor: '#5a7a6a', subtextColorLight: null,
+    priceColor: '#00ff88',
+    buttonGradient: 'linear-gradient(135deg,#00ff88,#00ccff)',
+    imageRadius: 'rounded-xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-2xl', cardShadow: '0 0 20px rgba(0,255,136,0.08)',
+    headerBg: 'rgba(13,13,26,0.95)', headerBgLight: null,
+    inherentlyDark: true,
+  },
+
+  /* ── Nature: earthy greens, organic feel ── */
+  nature: {
+    pageBg: '#f4f1eb', pageBgLight: null,
+    cardBg: '#ffffff', cardBgLight: null,
+    cardBorder: 'rgba(76,111,64,0.15)', cardBorderLight: null,
+    textColor: '#2c3e2c', textColorLight: null,
+    subtextColor: '#7a8a6e', subtextColorLight: null,
+    priceColor: '#4c6f40',
+    buttonGradient: 'linear-gradient(135deg,#4c6f40,#7ab362)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-2xl', cardShadow: '0 2px 12px rgba(0,0,0,0.05)',
+    headerBg: 'rgba(244,241,235,0.95)', headerBgLight: null,
+    inherentlyDark: false,
+  },
+
+  /* keep dark/minimalist/geometric/etc as their default shop look */
+  dark: defaultShop,
+  minimalist: defaultShop,
+  geometric: defaultShop,
+  pastel: defaultShop,
+  cyberpunk: defaultShop,
+  ocean: defaultShop,
+  forest: defaultShop,
+  sunset: defaultShop,
+  rose: defaultShop,
+  gold: defaultShop,
+};
+
 export const THEMES = [
   { id: 'default', label: { fr: 'Blanc Standard', en: 'Standard White' }, bg: 'bg-white', text: 'text-gray-900', accent: 'bg-gray-900', free: true, premium: false, hasBg: false },
+  { id: 'elegance', label: { fr: 'Élégance', en: 'Elegance' }, bg: 'bg-[#faf9f6]', text: 'text-gray-900', accent: 'bg-gray-900', free: false, premium: false, hasBg: false },
+  { id: 'modern', label: { fr: 'Moderne', en: 'Modern' }, bg: 'bg-[#FFF8F0]', text: 'text-gray-900', accent: 'bg-orange-500', free: false, premium: false, hasBg: false },
+  { id: 'luxury', label: { fr: 'Luxe', en: 'Luxury' }, bg: 'bg-[#0a0a0a]', text: 'text-[#f5f0e8]', accent: 'bg-[#C9A96E]', free: false, premium: false, hasBg: false },
+  { id: 'neon', label: { fr: 'Néon', en: 'Neon' }, bg: 'bg-[#0d0d1a]', text: 'text-[#e0ffe0]', accent: 'bg-[#00ff88]', free: false, premium: false, hasBg: false },
+  { id: 'nature', label: { fr: 'Nature', en: 'Nature' }, bg: 'bg-[#f4f1eb]', text: 'text-[#2c3e2c]', accent: 'bg-[#4c6f40]', free: false, premium: false, hasBg: false },
   { id: 'dark', label: { fr: 'Sombre Élégant', en: 'Elegant Dark' }, bg: 'bg-gray-900', text: 'text-white', accent: 'bg-white', free: false, premium: false, hasBg: false },
   { id: 'minimalist', label: { fr: 'Minimaliste', en: 'Minimalist' }, bg: 'bg-gradient-to-br from-white to-gray-50', text: 'text-gray-900', accent: 'bg-gray-800', free: false, premium: false, hasBg: true },
   { id: 'geometric', label: { fr: 'Géométrique', en: 'Geometric' }, bg: 'bg-gradient-to-br from-slate-950 to-slate-900', text: 'text-white', accent: 'bg-cyan-400', free: false, premium: false, hasBg: true },

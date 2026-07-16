@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Profile, Product, Service, Transaction } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
-import { PLAN_CONFIGS } from '../../lib/planLimits';
+import { PLAN_CONFIGS, SHOP_THEMES, ShopThemeConfig } from '../../lib/planLimits';
 import { LandingLang } from '../../lib/landingTranslations';
 import { supabase } from '../../lib/supabase';
 import PurchaseModal, { CartItem } from './PurchaseModal';
@@ -137,6 +137,7 @@ export default function PublicProfileView({ profile, products, services, interac
       .from('transactions')
       .select('*')
       .eq('buyer_phone', trackingPhone.trim())
+      .eq('seller_id', profile.user_id || '')
       .order('created_at', { ascending: false });
     setTrackingOrders((data as Transaction[]) || []);
     setTrackingLoading(false);
@@ -173,18 +174,24 @@ export default function PublicProfileView({ profile, products, services, interac
 
   const showBadge = (profile.plan_type ?? 'free') === 'free';
 
-  /* Le mode clair/sombre du visiteur pilote désormais toute la page, y compris
-     le contenu de la boutique — pas seulement la barre de navigation. */
-  const themeDark = dk;
-  const subtextClass = themeDark ? 'text-[#8c8ab0]' : 'text-gray-600';
-  /* Cartes en mode sombre : surface violacée solide façon tableau de bord,
-     plus de bordures blanches translucides "glass". */
-  const cardBg = themeDark
-    ? 'bg-[#12122b] border-[rgba(139,124,255,0.16)] hover:border-[rgba(139,124,255,0.4)] hover:shadow-[0_8px_30px_rgba(108,99,255,0.15)]'
-    : 'bg-white border-gray-200/80 hover:border-gray-300 hover:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05)] shadow-sm';
-  const cardText = themeDark ? 'text-[#f2f1ff]' : 'text-gray-900';
-  /* headerBg : suit la préférence claire/sombre du visiteur (barre de navigation + tiroirs) */
-  const headerBg = dk ? 'bg-[#0d0d22]/90 border-[rgba(139,124,255,0.16)]' : 'bg-white/95 border-gray-200';
+  /* ══ Shop theme resolution ══ */
+  const shopTheme: ShopThemeConfig = SHOP_THEMES[profile.theme ?? 'default'] ?? SHOP_THEMES.default;
+  /* For themes with inherentlyDark=true, the visitor's dark/light toggle has no effect.
+     For themes with separate light values (pageBgLight != null), the toggle picks the variant.
+     For themes where light values are null (elegance, modern, nature, luxury, neon),
+     the theme is self-contained — its own colors are used regardless of toggle. */
+  const themeDark = shopTheme.inherentlyDark ? true : (shopTheme.pageBgLight === null ? false : dk);
+  const pick = (dark: string, light: string | null) => light === null ? dark : (themeDark ? dark : light);
+
+  const stPageBg = pick(shopTheme.pageBg, shopTheme.pageBgLight);
+  const stCardBg = pick(shopTheme.cardBg, shopTheme.cardBgLight);
+  const stCardBorder = pick(shopTheme.cardBorder, shopTheme.cardBorderLight);
+  const stText = pick(shopTheme.textColor, shopTheme.textColorLight);
+  const stSubtext = pick(shopTheme.subtextColor, shopTheme.subtextColorLight);
+  const stHeaderBg = pick(shopTheme.headerBg, shopTheme.headerBgLight);
+
+  const cardBgStyle: React.CSSProperties = { background: stCardBg, borderColor: stCardBorder };
+  const headerBg = '';
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -311,25 +318,25 @@ export default function PublicProfileView({ profile, products, services, interac
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden font-sans antialiased"
-      style={{ background: dk ? '#0b0b1e' : '#fbfaff' }}>
+      style={{ background: stPageBg }}>
 
       {/* ══ Header façon marketplace ══ */}
-      <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${headerBg}`}>
+      <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${headerBg}`} style={{ background: stHeaderBg }}>
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-2.5">
 
           {/* Logo + nom — toujours à gauche */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center shrink-0 ${dk ? 'bg-[rgba(139,124,255,0.12)]' : 'bg-gray-100'}`}>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden flex items-center justify-center shrink-0" style={{ background: themeDark ? 'rgba(139,124,255,0.12)' : `${stCardBorder}` }}>
               {profile.shop_logo_url ? (
                 <img src={profile.shop_logo_url} alt={shopDisplayName} className="w-full h-full object-cover" />
               ) : (profile.plan_type ?? 'free') === 'free' ? (
                 <img src="/logo.png" alt="BioLinkWD" className="w-full h-full object-contain p-1"
                   onError={e => { e.currentTarget.style.display = 'none'; }} />
               ) : (
-                <Store size={16} className={dk ? 'text-[#c7c5e8]' : 'text-gray-500'} />
+                <Store size={16} style={{ color: stSubtext }} />
               )}
             </div>
-            <span className={`font-black text-xs sm:text-sm truncate ${forceDesktop ? 'max-w-none' : forceMobile ? 'max-w-[64px]' : 'max-w-[64px] sm:max-w-[140px] md:max-w-none'} ${dk ? 'text-[#f2f1ff]' : 'text-gray-900'}`}>
+            <span className={`font-black text-xs sm:text-sm truncate ${forceDesktop ? 'max-w-none' : forceMobile ? 'max-w-[64px]' : 'max-w-[64px] sm:max-w-[140px] md:max-w-none'}`} style={{ color: stText }}>
               {shopDisplayName}
             </span>
           </div>
@@ -340,8 +347,8 @@ export default function PublicProfileView({ profile, products, services, interac
               <button key={tb} onClick={() => setTab(tb)}
                 className="px-3.5 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1.5"
                 style={currentTab === tb
-                  ? { background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)', color: '#fff' }
-                  : { color: dk ? 'rgba(255,255,255,0.6)' : '#6b7280', background: 'transparent' }}>
+                  ? { background: shopTheme.buttonGradient, color: '#fff' }
+                  : { color: stSubtext, background: 'transparent' }}>
                 {tb === 'shop' && <ShoppingBag size={12} />}
                 {tb === 'services' && <Briefcase size={12} />}
                 {tb === 'links' && <Link2 size={12} />}
@@ -352,8 +359,8 @@ export default function PublicProfileView({ profile, products, services, interac
             <button onClick={() => setTab('tracking')}
               className="px-3.5 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1.5"
               style={currentTab === 'tracking'
-                ? { background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)', color: '#fff' }
-                : { color: dk ? 'rgba(255,255,255,0.6)' : '#6b7280', background: 'transparent' }}>
+                ? { background: shopTheme.buttonGradient, color: '#fff' }
+                : { color: stSubtext, background: 'transparent' }}>
               <PackageSearch size={12} />
               {TAB_LABEL.tracking}
             </button>
@@ -362,13 +369,14 @@ export default function PublicProfileView({ profile, products, services, interac
           {/* Recherche */}
           {(activeProducts.length > 0 || activeServices.length > 0) && (
             <div className="flex-1 min-w-0">
-              <div className={`flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1.5 sm:py-2 ${dk ? 'bg-[rgba(139,124,255,0.08)]' : 'bg-gray-100'}`}>
-                <Search size={13} className={`shrink-0 ${dk ? 'text-[#8c8ab0]' : 'text-gray-400'}`} />
+              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1.5 sm:py-2" style={{ background: themeDark ? 'rgba(139,124,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
+                <Search size={13} className="shrink-0" style={{ color: stSubtext }} />
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={lang === 'fr' ? 'Rechercher...' : 'Search...'}
-                  className={`flex-1 min-w-0 w-full bg-transparent text-xs font-medium outline-none ${dk ? 'text-[#f2f1ff] placeholder-[#5a5878]' : 'text-gray-900 placeholder-gray-400'}`}
+                  className="flex-1 min-w-0 w-full bg-transparent text-xs font-medium outline-none"
+                  style={{ color: stText }}
                 />
               </div>
             </div>
@@ -430,18 +438,18 @@ export default function PublicProfileView({ profile, products, services, interac
         <div className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0'}`}
           onClick={() => setMenuOpen(false)} />
         <div className="absolute right-0 top-0 bottom-0 w-full max-w-[280px] flex flex-col shadow-2xl pointer-events-auto"
-          style={{ background: dk ? '#12122b' : '#fff', transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)', transform: menuOpen ? 'translateX(0)' : 'translateX(100%)' }}>
-          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: dk ? 'rgba(139,124,255,0.16)' : '#f3f4f6' }}>
-            <h3 className="font-black" style={{ color: dk ? '#f2f1ff' : '#111827' }}>{lang === 'fr' ? 'Menu' : 'Menu'}</h3>
-            <button onClick={() => setMenuOpen(false)} style={{ color: dk ? '#8c8ab0' : '#9ca3af' }}><X size={20} /></button>
+          style={{ background: stCardBg, transition: 'transform 0.32s cubic-bezier(0.4,0,0.2,1)', transform: menuOpen ? 'translateX(0)' : 'translateX(100%)' }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: stCardBorder }}>
+            <h3 className="font-black" style={{ color: stText }}>{lang === 'fr' ? 'Menu' : 'Menu'}</h3>
+            <button onClick={() => setMenuOpen(false)} style={{ color: stSubtext }}><X size={20} /></button>
           </div>
           <nav className="flex-1 p-3 space-y-1.5">
             {availableTabs.map(tb => (
               <button key={tb} onClick={() => { setTab(tb); setMenuOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
                 style={currentTab === tb
-                  ? { background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)', color: '#fff' }
-                  : { color: dk ? '#8c8ab0' : '#4b5563', background: 'transparent' }}>
+                  ? { background: shopTheme.buttonGradient, color: '#fff' }
+                  : { color: stSubtext, background: 'transparent' }}>
                 {tb === 'shop' && <ShoppingBag size={16} />}
                 {tb === 'services' && <Briefcase size={16} />}
                 {tb === 'links' && <Link2 size={16} />}
@@ -452,19 +460,19 @@ export default function PublicProfileView({ profile, products, services, interac
             <button onClick={() => { setTab('tracking'); setMenuOpen(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
               style={currentTab === 'tracking'
-                ? { background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)', color: '#fff' }
-                : { color: dk ? '#8c8ab0' : '#4b5563', background: 'transparent' }}>
+                ? { background: shopTheme.buttonGradient, color: '#fff' }
+                : { color: stSubtext, background: 'transparent' }}>
               <PackageSearch size={16} />
               {lang === 'fr' ? 'Suivi de commande' : 'Track my order'}
             </button>
 
             {/* Séparateur */}
-            <div className="my-2 border-t" style={{ borderColor: dk ? 'rgba(139,124,255,0.12)' : '#f3f4f6' }} />
+            <div className="my-2 border-t" style={{ borderColor: stCardBorder }} />
 
             {/* Panier */}
             <button onClick={() => { interactive && setCartOpen(true); setMenuOpen(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-              style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+              style={{ color: stSubtext }}>
               <ShoppingCart size={16} />
               {lang === 'fr' ? 'Panier' : 'Cart'}
               {cartCount > 0 && (
@@ -477,15 +485,15 @@ export default function PublicProfileView({ profile, products, services, interac
             {/* Mode clair/sombre */}
             <button onClick={toggleDark}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-              style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+              style={{ color: stSubtext }}>
               {dk ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} />}
               {dk ? (lang === 'fr' ? 'Mode clair' : 'Light mode') : (lang === 'fr' ? 'Mode sombre' : 'Dark mode')}
             </button>
 
             {/* Langue — sélecteur compact */}
             <div className="flex items-center gap-3 px-4 py-3">
-              <Globe size={16} style={{ color: dk ? '#8c8ab0' : '#4b5563' }} className="shrink-0" />
-              <span className="text-sm font-bold" style={{ color: dk ? '#8c8ab0' : '#4b5563' }}>
+              <Globe size={16} style={{ color: stSubtext }} className="shrink-0" />
+              <span className="text-sm font-bold" style={{ color: stSubtext }}>
                 {lang === 'fr' ? 'Langue' : 'Language'}
               </span>
               <select
@@ -526,7 +534,7 @@ export default function PublicProfileView({ profile, products, services, interac
         {currentTab === 'links' && socials.length === 0 && (
           <div className="text-center py-16 rounded-2xl border border-dashed border-gray-500/30">
             <Link2 size={24} className="mx-auto text-gray-500 mb-2" />
-            <p className={`text-sm ${subtextClass} font-medium`}>
+            <p className="text-sm font-medium" style={{ color: stSubtext }}>
               {lang === 'fr' ? 'Aucun réseau social ajouté pour le moment.' : 'No social link added yet.'}
             </p>
           </div>
@@ -542,23 +550,24 @@ export default function PublicProfileView({ profile, products, services, interac
               const platformLabel = social.platform.charAt(0).toUpperCase() + social.platform.slice(1);
               return (
                 <a key={i} href={href} target="_blank" rel="noopener noreferrer"
-                  className={`group flex items-center gap-4 p-3.5 rounded-2xl border transition-all duration-300 transform hover:-translate-y-0.5 active:scale-[0.98] shadow-sm hover:shadow-md ${cardBg}`}
+                  className="group flex items-center gap-4 p-3.5 rounded-2xl border transition-all duration-300 transform hover:-translate-y-0.5 active:scale-[0.98] shadow-sm hover:shadow-md"
+                  style={cardBgStyle}
                   onClick={e => { if (href === '#' || !interactive) e.preventDefault(); }}>
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br ${colors?.bg || (themeDark ? 'from-gray-700 to-gray-800' : 'from-gray-100 to-gray-200')} shadow-md`}>
                     <Icon size={22} className={colors?.text || (themeDark ? 'text-white' : 'text-gray-700')} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className={`text-base font-bold ${themeDark ? 'text-white' : 'text-gray-900'}`}>
+                    <span className="text-base font-bold" style={{ color: stText }}>
                       {platformLabel === 'Twitter' ? 'X / Twitter' : platformLabel}
                     </span>
                     {social.url && (
-                      <p className={`text-xs truncate mt-0.5 ${themeDark ? 'text-[#5a5878]' : 'text-gray-400'}`}>
+                      <p className="text-xs truncate mt-0.5" style={{ color: stSubtext }}>
                         {href === '#' ? '' : href.replace('https://', '')}
                       </p>
                     )}
                   </div>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 group-hover:translate-x-0.5 ${themeDark ? 'bg-[rgba(139,124,255,0.12)]' : 'bg-gray-100'}`}>
-                    <ArrowRight size={14} className={themeDark ? 'text-[#c7c5e8]' : 'text-gray-500'} />
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 group-hover:translate-x-0.5" style={{ background: stCardBorder }}>
+                    <ArrowRight size={14} style={{ color: stSubtext }} />
                   </div>
                 </a>
               );
@@ -568,18 +577,22 @@ export default function PublicProfileView({ profile, products, services, interac
 
         {/* Boutique produits */}
         {currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className={`grid ${shopTheme.gridCols} gap-4`}>
             {filteredProducts.map((product, i) => (
               <div key={product.id}
-                className={`group flex flex-col border rounded-xl overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5 ${cardBg}`}>
+                className={`group flex flex-col border ${shopTheme.cardRadius} overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5`}
+                style={{ ...cardBgStyle, boxShadow: shopTheme.cardShadow }}>
                 <button
                   onClick={() => setViewingProductId(product.id)}
-                  className="aspect-square overflow-hidden bg-gray-900 relative w-full text-left">
+                  className={`aspect-square overflow-hidden relative w-full text-left ${shopTheme.imageRadius === 'rounded-full' ? 'p-4' : ''}`}
+                  style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
                   {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <img src={product.image_url} alt={product.name}
+                      className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${shopTheme.imageRadius}`} />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
-                      <ShoppingBag size={32} className="text-gray-600" />
+                    <div className={`w-full h-full flex items-center justify-center ${shopTheme.imageRadius}`}
+                      style={{ background: themeDark ? 'linear-gradient(135deg,#1a1a2e,#0d0d1a)' : 'linear-gradient(135deg,#e5e7eb,#f3f4f6)' }}>
+                      <ShoppingBag size={32} style={{ color: stSubtext }} />
                     </div>
                   )}
                   {product.quantity <= 0 && (
@@ -595,8 +608,8 @@ export default function PublicProfileView({ profile, products, services, interac
                 </button>
                 <div className="p-3.5 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className={`text-sm font-bold ${cardText} line-clamp-1 group-hover:text-blue-500 transition-colors`}>{product.name}</h3>
-                    <p className={`text-[11px] ${subtextClass} mt-1 line-clamp-2 leading-relaxed h-8`}>
+                    <h3 className="text-sm font-bold line-clamp-1 transition-colors" style={{ color: stText }}>{product.name}</h3>
+                    <p className="text-[11px] mt-1 line-clamp-2 leading-relaxed h-8" style={{ color: stSubtext }}>
                       {product.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
                     </p>
                   </div>
@@ -606,21 +619,21 @@ export default function PublicProfileView({ profile, products, services, interac
                         <Star key={n} size={10}
                           className={n <= Math.round(product.avg_rating || 0) ? 'text-amber-500 fill-current' : 'text-gray-300 fill-current'} />
                       ))}
-                      <span className={`text-[9px] ${subtextClass} ml-1 font-semibold`}>
+                      <span className="text-[9px] ml-1 font-semibold" style={{ color: stSubtext }}>
                         {(product.avg_rating || 0).toFixed(1)} ({product.ratings_count || 0})
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <span className={`text-sm font-extrabold tracking-tight ${themeDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                      <span className="text-sm font-extrabold tracking-tight" style={{ color: shopTheme.priceColor }}>
                         {product.price.toLocaleString()} <span className="text-[10px]">{product.currency}</span>
                       </span>
                     </div>
                     <button
                       onClick={() => addToCart(product)}
                       disabled={product.quantity <= 0 || !interactive}
-                      className="mt-1 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`mt-1 w-full flex items-center justify-center gap-1.5 py-2 ${shopTheme.cardRadius} text-xs font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed`}
                       style={{
-                        background: addedId === product.id ? '#22c55e' : 'linear-gradient(135deg,#6C63FF,#00C2FF)',
+                        background: addedId === product.id ? '#22c55e' : shopTheme.buttonGradient,
                         color: '#fff',
                         transform: addedId === product.id ? 'scale(1.04)' : 'scale(1)',
                       }}>
@@ -641,7 +654,8 @@ export default function PublicProfileView({ profile, products, services, interac
           <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">
             {filteredServices.map(service => (
               <div key={service.id}
-                className={`group flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md ${cardBg}`}>
+                className="group flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md"
+                style={cardBgStyle}>
                 <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 flex items-center justify-center bg-gradient-to-br from-pink-500 to-violet-500">
                   {service.image_url ? (
                     <img src={service.image_url} alt={service.name} className="w-full h-full object-cover" />
@@ -651,17 +665,17 @@ export default function PublicProfileView({ profile, products, services, interac
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className={`text-sm font-bold ${cardText} truncate`}>{service.name}</h3>
+                    <h3 className="text-sm font-bold truncate" style={{ color: stText }}>{service.name}</h3>
                     {service.duration && (
                       <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-500">
                         <Clock size={9} />{service.duration}
                       </span>
                     )}
                   </div>
-                  <p className={`text-[11px] ${subtextClass} mt-0.5 line-clamp-1`}>
+                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: stSubtext }}>
                     {service.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
                   </p>
-                  <span className={`text-sm font-extrabold tracking-tight ${themeDark ? 'text-pink-400' : 'text-pink-600'}`}>
+                  <span className="text-sm font-extrabold tracking-tight" style={{ color: shopTheme.priceColor }}>
                     {service.price.toLocaleString()} <span className="text-[10px]">{service.currency}</span>
                   </span>
                 </div>
@@ -676,11 +690,11 @@ export default function PublicProfileView({ profile, products, services, interac
 
             {/* ══ Colonne gauche — recherche + liste des commandes ══ */}
             <div>
-              <div className="rounded-2xl border p-4 mb-4" style={{ borderColor: themeDark ? 'rgba(139,124,255,0.16)' : '#eeecfb', background: themeDark ? '#12122b' : '#fff' }}>
-                <p className={`text-xs font-bold mb-2 ${cardText}`}>
+              <div className="rounded-2xl border p-4 mb-4" style={{ borderColor: stCardBorder, background: stCardBg }}>
+                <p className="text-xs font-bold mb-2" style={{ color: stText }}>
                   {lang === 'fr' ? 'Retrouver mes commandes' : 'Find my orders'}
                 </p>
-                <p className={`text-[11px] mb-3 ${subtextClass}`}>
+                <p className="text-[11px] mb-3" style={{ color: stSubtext }}>
                   {lang === 'fr'
                     ? 'Entrez le numéro de téléphone utilisé lors du paiement.'
                     : 'Enter the phone number used at checkout.'}
@@ -691,23 +705,23 @@ export default function PublicProfileView({ profile, products, services, interac
                     placeholder="+225 07 00 00 00"
                     className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
                     style={{
-                      background: themeDark ? '#0d0d22' : '#faf9ff',
-                      border: `1px solid ${themeDark ? 'rgba(139,124,255,0.18)' : '#e6e1fb'}`,
-                      color: themeDark ? '#f2f1ff' : '#16162e',
+                      background: stPageBg,
+                      border: `1px solid ${stCardBorder}`,
+                      color: stText,
                     }}
                   />
                   <button type="submit" disabled={trackingLoading}
                     className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    style={{ background: shopTheme.buttonGradient }}>
                     {trackingLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
                   </button>
                 </form>
               </div>
 
               {trackingSearched && !trackingLoading && trackingOrders?.length === 0 && (
-                <div className="text-center py-10 rounded-2xl border border-dashed" style={{ borderColor: themeDark ? 'rgba(139,124,255,0.2)' : '#e5e2f5' }}>
-                  <Package size={26} className={`mx-auto mb-2 ${subtextClass}`} />
-                  <p className={`text-sm ${subtextClass}`}>{lang === 'fr' ? 'Aucune commande trouvée.' : 'No orders found.'}</p>
+                <div className="text-center py-10 rounded-2xl border border-dashed" style={{ borderColor: stCardBorder }}>
+                  <Package size={26} className="mx-auto mb-2" style={{ color: stSubtext }} />
+                  <p className="text-sm" style={{ color: stSubtext }}>{lang === 'fr' ? 'Aucune commande trouvée.' : 'No orders found.'}</p>
                 </div>
               )}
 
@@ -726,8 +740,8 @@ export default function PublicProfileView({ profile, products, services, interac
                       <button key={order.id} onClick={() => setSelectedOrderId(order.id)}
                         className="w-full text-left rounded-2xl p-3.5 border transition"
                         style={{
-                          background: active ? (themeDark ? 'rgba(108,99,255,0.12)' : '#f5f3ff') : (themeDark ? '#12122b' : '#fff'),
-                          borderColor: active ? '#6C63FF' : (themeDark ? 'rgba(139,124,255,0.16)' : '#eeecfb'),
+                          background: active ? (themeDark ? 'rgba(108,99,255,0.12)' : '#f5f3ff') : stCardBg,
+                          borderColor: active ? shopTheme.priceColor : stCardBorder,
                         }}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
@@ -735,11 +749,11 @@ export default function PublicProfileView({ profile, products, services, interac
                               <StatusIcon size={15} color={statusMeta.color} />
                             </div>
                             <div>
-                              <p className={`text-sm font-bold ${cardText}`}>{order.amount.toLocaleString()} {order.currency}</p>
+                              <p className="text-sm font-bold" style={{ color: stText }}>{order.amount.toLocaleString()} {order.currency}</p>
                               <p className="text-xs font-semibold" style={{ color: statusMeta.color }}>{statusMeta.label}</p>
                             </div>
                           </div>
-                          <p className={`text-[11px] ${subtextClass}`}>{new Date(order.created_at).toLocaleDateString()}</p>
+                          <p className="text-[11px]" style={{ color: stSubtext }}>{new Date(order.created_at).toLocaleDateString()}</p>
                         </div>
                       </button>
                     );
@@ -751,18 +765,18 @@ export default function PublicProfileView({ profile, products, services, interac
             {/* ══ Colonne droite — détail de la commande sélectionnée ══ */}
             <div>
               {!selectedOrder ? (
-                <div className="h-full flex items-center justify-center text-center py-16 rounded-2xl border border-dashed" style={{ borderColor: themeDark ? 'rgba(139,124,255,0.2)' : '#e5e2f5' }}>
+                <div className="h-full flex items-center justify-center text-center py-16 rounded-2xl border border-dashed" style={{ borderColor: stCardBorder }}>
                   <div>
-                    <PackageSearch size={28} className={`mx-auto mb-2 ${subtextClass}`} />
-                    <p className={`text-sm ${subtextClass}`}>
+                    <PackageSearch size={28} className="mx-auto mb-2" style={{ color: stSubtext }} />
+                    <p className="text-sm" style={{ color: stSubtext }}>
                       {lang === 'fr' ? 'Sélectionnez une commande pour voir son suivi.' : 'Select an order to see its tracking.'}
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border p-5" style={{ borderColor: themeDark ? 'rgba(139,124,255,0.16)' : '#eeecfb', background: themeDark ? '#12122b' : '#fff' }}>
-                  <p className={`text-xs font-semibold mb-1 ${subtextClass}`}>{lang === 'fr' ? 'Suivi de commande' : 'Order tracking'}</p>
-                  <h3 className={`text-lg font-black mb-4 ${cardText}`}>{selectedOrder.amount.toLocaleString()} {selectedOrder.currency}</h3>
+                <div className="rounded-2xl border p-5" style={{ borderColor: stCardBorder, background: stCardBg }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: stSubtext }}>{lang === 'fr' ? 'Suivi de commande' : 'Order tracking'}</p>
+                  <h3 className="text-lg font-black mb-4" style={{ color: stText }}>{selectedOrder.amount.toLocaleString()} {selectedOrder.currency}</h3>
 
                   {/* Étapes */}
                   <div className="flex items-center justify-between mb-6">
@@ -775,12 +789,12 @@ export default function PublicProfileView({ profile, products, services, interac
                           <div className="flex flex-col items-center gap-1.5">
                             <div className="w-9 h-9 rounded-full flex items-center justify-center"
                               style={{
-                                background: i <= currentStep ? 'linear-gradient(135deg,#6C63FF,#00C2FF)' : (themeDark ? '#191938' : '#f3f4f6'),
-                                color: i <= currentStep ? '#fff' : (themeDark ? '#5a5878' : '#9ca3af'),
+                                background: i <= currentStep ? shopTheme.buttonGradient : (themeDark ? '#191938' : '#f3f4f6'),
+                                color: i <= currentStep ? '#fff' : stSubtext,
                               }}>
                               <StepIcon size={15} />
                             </div>
-                            <span className={`text-[10px] font-semibold text-center max-w-[64px] ${subtextClass}`}>
+                            <span className="text-[10px] font-semibold text-center max-w-[64px]" style={{ color: stSubtext }}>
                               {step === 'pending' ? (lang === 'fr' ? 'Paiement reçu' : 'Payment received')
                                 : step === 'shipped' ? (lang === 'fr' ? 'Expédiée' : 'Shipped')
                                 : (lang === 'fr' ? 'Livrée' : 'Delivered')}
@@ -822,7 +836,7 @@ export default function PublicProfileView({ profile, products, services, interac
                       </div>
                       <button onClick={confirmOrderDelivery} disabled={confirmingDelivery}
                         className="w-full text-white font-bold py-3 rounded-2xl transition disabled:opacity-50 flex items-center justify-center gap-2"
-                        style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                        style={{ background: shopTheme.buttonGradient }}>
                         {confirmingDelivery
                           ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           : <CheckCircle2 size={16} />}
@@ -841,11 +855,11 @@ export default function PublicProfileView({ profile, products, services, interac
           <div>
             <div className="flex items-center gap-2 mb-1">
               <MapPin size={16} style={{ color: '#6C63FF' }} />
-              <h2 className={`text-base font-black ${cardText}`}>
+              <h2 className="text-base font-black" style={{ color: stText }}>
                 {lang === 'fr' ? 'Où trouver les produits' : 'Where to find the products'}
               </h2>
             </div>
-            <p className={`text-xs mb-4 ${subtextClass}`}>
+            <p className="text-xs mb-4" style={{ color: stSubtext }}>
               {lang === 'fr'
                 ? 'Basculez entre vue simple et vue satellite.'
                 : 'Switch between simple and satellite view.'}
@@ -888,49 +902,49 @@ export default function PublicProfileView({ profile, products, services, interac
         <div className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${cartOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0'}`}
           onClick={() => setCartOpen(false)} />
         <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm flex flex-col shadow-2xl transition-transform duration-300 pointer-events-auto"
-          style={{ background: dk ? '#12122b' : '#fff', transform: cartOpen ? 'translateX(0)' : 'translateX(100%)' }}>
-          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: dk ? 'rgba(139,124,255,0.16)' : '#f3f4f6' }}>
-            <h3 className="font-black flex items-center gap-2" style={{ color: dk ? '#f2f1ff' : '#111827' }}>
+          style={{ background: stCardBg, transform: cartOpen ? 'translateX(0)' : 'translateX(100%)' }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: stCardBorder }}>
+            <h3 className="font-black flex items-center gap-2" style={{ color: stText }}>
               <ShoppingCart size={16} />{lang === 'fr' ? 'Mon panier' : 'My cart'}
             </h3>
-            <button onClick={() => setCartOpen(false)} style={{ color: dk ? '#8c8ab0' : '#9ca3af' }}><X size={20} /></button>
+            <button onClick={() => setCartOpen(false)} style={{ color: stSubtext }}><X size={20} /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
             {cart.length === 0 ? (
-              <div className="text-center py-16 text-sm" style={{ color: dk ? '#8c8ab0' : '#9ca3af' }}>
+              <div className="text-center py-16 text-sm" style={{ color: stSubtext }}>
                 {lang === 'fr' ? 'Votre panier est vide.' : 'Your cart is empty.'}
               </div>
             ) : (
               cart.map(item => (
-                <div key={item.id} className="flex items-center gap-3 rounded-2xl p-2.5" style={{ border: `1px solid ${dk ? 'rgba(139,124,255,0.16)' : '#f3f4f6'}` }}>
-                  <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0" style={{ background: dk ? '#191938' : '#f3f4f6' }}>
+                <div key={item.id} className="flex items-center gap-3 rounded-2xl p-2.5" style={{ border: `1px solid ${stCardBorder}` }}>
+                  <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0" style={{ background: stPageBg }}>
                     {item.image_url && <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold truncate" style={{ color: dk ? '#f2f1ff' : '#111827' }}>{item.name}</p>
-                    <p className="text-xs text-emerald-600 font-bold mt-0.5">{item.price.toLocaleString()} {item.currency}</p>
+                    <p className="text-xs font-bold truncate" style={{ color: stText }}>{item.name}</p>
+                    <p className="text-xs font-bold mt-0.5" style={{ color: shopTheme.priceColor }}>{item.price.toLocaleString()} {item.currency}</p>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <button onClick={() => changeQty(item.id, -1)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: dk ? '#191938' : '#f3f4f6', color: dk ? '#f2f1ff' : '#111827' }}><Minus size={11} /></button>
-                      <span className="text-xs font-bold w-4 text-center" style={{ color: dk ? '#f2f1ff' : '#111827' }}>{item.qty}</span>
-                      <button onClick={() => changeQty(item.id, 1)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: dk ? '#191938' : '#f3f4f6', color: dk ? '#f2f1ff' : '#111827' }}><Plus size={11} /></button>
+                      <button onClick={() => changeQty(item.id, -1)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: stPageBg, color: stText }}><Minus size={11} /></button>
+                      <span className="text-xs font-bold w-4 text-center" style={{ color: stText }}>{item.qty}</span>
+                      <button onClick={() => changeQty(item.id, 1)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: stPageBg, color: stText }}><Plus size={11} /></button>
                     </div>
                   </div>
-                  <button onClick={() => removeFromCart(item.id)} className="shrink-0 hover:text-pink-500" style={{ color: dk ? '#4b4b6b' : '#d1d5db' }}><X size={16} /></button>
+                  <button onClick={() => removeFromCart(item.id)} className="shrink-0 hover:text-pink-500" style={{ color: stSubtext }}><X size={16} /></button>
                 </div>
               ))
             )}
           </div>
 
           {cart.length > 0 && (
-            <div className="p-5 border-t" style={{ borderColor: dk ? 'rgba(139,124,255,0.16)' : '#f3f4f6' }}>
+            <div className="p-5 border-t" style={{ borderColor: stCardBorder }}>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium" style={{ color: dk ? '#8c8ab0' : '#6b7280' }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
-                <span className="text-lg font-black" style={{ color: dk ? '#f2f1ff' : '#111827' }}>{cartTotal.toLocaleString()} {cart[0]?.currency}</span>
+                <span className="text-sm font-medium" style={{ color: stSubtext }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
+                <span className="text-lg font-black" style={{ color: stText }}>{cartTotal.toLocaleString()} {cart[0]?.currency}</span>
               </div>
               <button onClick={handleCheckout}
                 className="w-full text-white font-bold py-3 rounded-2xl transition"
-                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                style={{ background: shopTheme.buttonGradient }}>
                 {lang === 'fr' ? 'Commander' : 'Checkout'}
               </button>
             </div>

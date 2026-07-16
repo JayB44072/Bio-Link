@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Profile, SocialLink, Product, Service } from '../../../lib/types';
-import { PLAN_CONFIGS, THEMES, SOCIAL_PLATFORMS } from '../../../lib/planLimits';
+import { PLAN_CONFIGS, THEMES, SOCIAL_PLATFORMS, SHOP_THEMES } from '../../../lib/planLimits';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
@@ -381,6 +381,14 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
                         <Check size={11} className="text-white" strokeWidth={3} />
                       </div>
                     )}
+                    {/* Palette dots for themes with custom shop config */}
+                    {SHOP_THEMES[theme.id] && SHOP_THEMES[theme.id] !== SHOP_THEMES.default && (
+                      <div className="absolute bottom-1.5 left-1.5 flex gap-1">
+                        {[SHOP_THEMES[theme.id].pageBg, SHOP_THEMES[theme.id].priceColor, SHOP_THEMES[theme.id].cardBg].map((c, ci) => (
+                          <div key={ci} className="w-3 h-3 rounded-full border border-white/30" style={{ background: c }} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {/* Label */}
                   <div className="py-2 px-1">
@@ -500,7 +508,7 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
 
         {/* ── Sur PC (md+) : cadre téléphone ── */}
         <div className="hidden md:flex justify-center">
-          <div className="relative w-[260px] h-[560px] bg-gray-900 rounded-[2.5rem] border-[6px] border-gray-800 shadow-2xl overflow-hidden shrink-0">
+          <div className="relative w-[375px] h-[700px] bg-gray-900 rounded-[2.5rem] border-[6px] border-gray-800 shadow-2xl overflow-hidden shrink-0">
             <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-16 h-4 bg-gray-800 rounded-full z-20" />
             <div className="w-full h-full overflow-y-auto scrollbar-hide">
               <PublicProfileView profile={previewProfile} products={products} services={services} interactive={false} previewMode="mobile" />

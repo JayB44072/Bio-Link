@@ -537,10 +537,10 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                   <label className="block text-xs font-bold uppercase tracking-wider text-center" style={{ color: txtLabel }}>{lang === 'fr' ? 'Moyen de paiement' : t.paymentMethod}</label>
                   <div className="grid grid-cols-3 gap-2.5">
                     {[
-                      { id: 'card' as PaymentMethod, label: 'Carte', icon: CreditCard, activeClass: 'border-blue-600 bg-blue-50/40 text-blue-700' },
-                      { id: 'mtn' as PaymentMethod, label: 'MTN MoMo', icon: Smartphone, activeClass: 'border-yellow-500 bg-yellow-50/50 text-amber-950 font-bold' },
-                      { id: 'orange' as PaymentMethod, label: 'Orange Money', icon: Smartphone, activeClass: 'border-orange-500 bg-orange-50/40 text-orange-700 font-bold' },
-                    ].map(({ id, label, icon: Icon, activeClass }) => (
+                      { id: 'card' as PaymentMethod, label: 'Carte', icon: CreditCard, logo: null, activeClass: 'border-blue-600 bg-blue-50/40 text-blue-700' },
+                      { id: 'mtn' as PaymentMethod, label: 'MTN MoMo', icon: null, logo: '/mtn.png', activeClass: 'border-yellow-500 bg-yellow-50/50 text-amber-950 font-bold' },
+                      { id: 'orange' as PaymentMethod, label: 'Orange Money', icon: null, logo: '/orange.png', activeClass: 'border-orange-500 bg-orange-50/40 text-orange-700 font-bold' },
+                    ].map(({ id, label, icon: Icon, logo, activeClass }) => (
                       <button
                         key={id} type="button" onClick={() => setMethod(id)}
                         className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-2xl border text-xs font-medium transition-all duration-200 ${
@@ -550,7 +550,11 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                           ? (dk ? { borderColor: '#6C63FF', background: 'rgba(108,99,255,0.12)', color: '#a5b4fc' } : {})
                           : { borderColor: inputBorder, color: txtSub, background: inputBg }}
                       >
-                        <Icon size={18} className={method === id ? 'scale-110 transition-transform' : ''} />
+                        {logo ? (
+                          <img src={logo} alt={label} className={`w-6 h-6 object-contain ${method === id ? 'scale-110 transition-transform' : ''}`} />
+                        ) : Icon ? (
+                          <Icon size={18} className={method === id ? 'scale-110 transition-transform' : ''} />
+                        ) : null}
                         <span>{label}</span>
                       </button>
                     ))}
