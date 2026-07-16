@@ -320,6 +320,26 @@ export default function PublicProfileView({ profile, products, services, interac
     <div className="min-h-screen flex flex-col relative overflow-x-hidden font-sans antialiased"
       style={{ background: stPageBg }}>
 
+      {/* ══ Formes décoratives d'arrière-plan selon le thème ══ */}
+      {(profile.theme === 'modern') && (
+        <>
+          <div className="absolute top-0 right-0 w-[60%] h-[350px] rounded-bl-[100px] pointer-events-none z-0" style={{ background: 'linear-gradient(135deg,#e8c99b,#d4a574)' }} />
+          <div className="absolute top-[200px] left-0 w-[40%] h-[250px] rounded-tr-[80px] pointer-events-none z-0" style={{ background: 'rgba(232,201,155,0.3)' }} />
+        </>
+      )}
+      {(profile.theme === 'luxury') && (
+        <>
+          <div className="absolute top-0 left-0 w-full h-[300px] pointer-events-none z-0" style={{ background: 'linear-gradient(180deg,rgba(201,169,110,0.08) 0%,transparent 100%)' }} />
+          <div className="absolute bottom-0 right-0 w-[200px] h-[200px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(201,169,110,0.06) 0%,transparent 70%)' }} />
+        </>
+      )}
+      {(profile.theme === 'neon') && (
+        <>
+          <div className="absolute top-[100px] right-[10%] w-[300px] h-[300px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(0,255,136,0.04) 0%,transparent 70%)' }} />
+          <div className="absolute bottom-[200px] left-[5%] w-[250px] h-[250px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(0,204,255,0.04) 0%,transparent 70%)' }} />
+        </>
+      )}
+
       {/* ══ Header façon marketplace ══ */}
       <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${headerBg}`} style={{ background: stHeaderBg }}>
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-2.5">
@@ -386,24 +406,24 @@ export default function PublicProfileView({ profile, products, services, interac
           <div className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} items-center gap-1.5`}>
             <button onClick={toggleDark}
               className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition"
-              style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }}>
-              {dk ? <Sun size={15} /> : <Moon size={15} />}
+              style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }}>
+              {themeDark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
             <div className="relative shrink-0" ref={langRef}>
               <button onClick={() => setLangOpen(v => !v)}
                 className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-colors"
-                style={{ background: dk ? 'rgba(139,124,255,0.1)' : '#f3f4f6', color: dk ? '#c7c5e8' : '#6b7280' }}>
+                style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }}>
                 <Globe size={12} />{lang.toUpperCase()}
               </button>
               {langOpen && (
                 <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
-                  style={{ background: dk ? '#111128' : '#fff', borderColor: dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb' }}>
+                  style={{ background: stCardBg, borderColor: stCardBorder }}>
                   {LANG_OPTIONS.map(({ code, label }) => (
                     <button key={code} onClick={() => { setLang(code); setLangOpen(false); }}
                       className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
                       style={{
-                        color: lang === code ? '#6C63FF' : (dk ? '#c0c0e0' : '#374151'),
-                        background: lang === code ? (dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff') : 'transparent',
+                        color: lang === code ? shopTheme.priceColor : stSubtext,
+                        background: lang === code ? (themeDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)') : 'transparent',
                       }}>
                       {label}
                       {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
@@ -416,8 +436,9 @@ export default function PublicProfileView({ profile, products, services, interac
 
           {/* Panier — desktop uniquement (sur mobile il est dans le hamburger) */}
           <button onClick={() => interactive && setCartOpen(true)}
-            className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
-            <ShoppingCart size={15} className={dk ? 'text-[#f2f1ff]' : 'text-gray-700'} />
+            className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition`}
+            style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
+            <ShoppingCart size={15} style={{ color: stText }} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-pink-600 text-white text-[9px] font-black flex items-center justify-center">
                 {cartCount}
@@ -427,8 +448,9 @@ export default function PublicProfileView({ profile, products, services, interac
 
           {/* Hamburger — mobile uniquement, à l'extrême droite */}
           <button onClick={() => setMenuOpen(true)}
-            className={`${forceDesktop ? 'hidden' : forceMobile ? 'flex' : 'flex md:hidden'} shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition ${dk ? 'bg-[rgba(139,124,255,0.1)] hover:bg-[rgba(139,124,255,0.2)]' : 'bg-gray-100 hover:bg-gray-200'}`}>
-            <Menu size={16} className={dk ? 'text-[#f2f1ff]' : 'text-gray-700'} />
+            className={`${forceDesktop ? 'hidden' : forceMobile ? 'flex' : 'flex md:hidden'} shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full items-center justify-center transition`}
+            style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
+            <Menu size={16} style={{ color: stText }} />
           </button>
         </div>
       </header>
@@ -501,9 +523,9 @@ export default function PublicProfileView({ profile, products, services, interac
                 onChange={e => setLang(e.target.value as LandingLang)}
                 className="ml-auto text-sm font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer"
                 style={{
-                  background: dk ? 'rgba(139,124,255,0.12)' : '#f5f3ff',
-                  color: dk ? '#c7c5e8' : '#6C63FF',
-                  border: `1px solid ${dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb'}`,
+                  background: themeDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
+                  color: shopTheme.priceColor,
+                  border: `1px solid ${stCardBorder}`,
                 }}>
                 {LANG_OPTIONS.map(({ code, label }) => (
                   <option key={code} value={code}>{label}</option>
@@ -529,6 +551,18 @@ export default function PublicProfileView({ profile, products, services, interac
         </div>
       ) : (
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 pt-6 pb-20 relative z-10">
+
+        {/* ══ Bannière promotionnelle — thème Modern ══ */}
+        {profile.theme === 'modern' && currentTab === 'shop' && activeProducts.length > 0 && (
+          <div className="mb-6 rounded-3xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg,#d4a574,#e8c99b,#f0dcc0)', minHeight: '140px' }}>
+            <div className="absolute right-0 top-0 w-1/2 h-full" style={{ background: 'radial-gradient(ellipse at 80% 50%,rgba(255,255,255,0.25),transparent 70%)' }} />
+            <div className="relative z-10 p-6 flex flex-col justify-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">{lang === 'fr' ? 'Découvrez notre sélection' : 'Discover our selection'}</p>
+              <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">{shopDisplayName}</h2>
+              <p className="text-xs text-white/80 mt-1">{lang === 'fr' ? `${activeProducts.length} produits disponibles` : `${activeProducts.length} products available`}</p>
+            </div>
+          </div>
+        )}
 
         {/* Liens sociaux — état vide */}
         {currentTab === 'links' && socials.length === 0 && (
@@ -577,7 +611,7 @@ export default function PublicProfileView({ profile, products, services, interac
 
         {/* Boutique produits */}
         {currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className={`grid ${shopTheme.gridCols} gap-4`}>
+          <div className={`grid ${forceMobile ? 'grid-cols-2' : shopTheme.gridCols} gap-4`}>
             {filteredProducts.map((product, i) => (
               <div key={product.id}
                 className={`group flex flex-col border ${shopTheme.cardRadius} overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5`}
