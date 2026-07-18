@@ -4,6 +4,7 @@ import { Profile, Product, Service } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
 import LanguageSelector from '../ui/LanguageSelector';
 import PublicProfileView from './PublicProfileView';
+import { Skeleton, SkeletonProductCard } from '../ui/Skeleton';
 import { Link2 } from 'lucide-react';
 
 interface PublicPageProps {
@@ -44,9 +45,22 @@ export default function PublicPage({ username }: PublicPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-3">
-        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-        <span className="text-gray-400 text-xs font-medium tracking-wider animate-pulse">L'univers de @{username} charge...</span>
+      <div className="min-h-screen" style={{ background: '#fbfaff' }}>
+        {/* Header skeleton */}
+        <header className="sticky top-0 z-40 backdrop-blur-md border-b bg-white/95 border-gray-200">
+          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-2.5">
+            <Skeleton className="w-9 h-9 rounded-xl" />
+            <Skeleton className="h-4 w-24" />
+            <div className="flex-1"><Skeleton className="h-8 w-full rounded-full" /></div>
+            <Skeleton className="w-9 h-9 rounded-full" />
+          </div>
+        </header>
+        {/* Products grid skeleton */}
+        <div className="max-w-5xl mx-auto w-full px-4 pt-6 pb-20">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => <SkeletonProductCard key={i} />)}
+          </div>
+        </div>
       </div>
     );
   }

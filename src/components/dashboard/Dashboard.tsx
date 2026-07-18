@@ -12,9 +12,14 @@ import Statistics from './tabs/Statistics';
 import DashboardMap from './tabs/DashboardMap';
 import Wallet from './tabs/Wallet';
 import Subscription from './tabs/Subscription';
+import Themes from './tabs/Themes';
+import QrCodeTab from './tabs/QrCode';
+import Affiliate from './tabs/Affiliate';
+import { Skeleton as SkelBlock } from '../ui/Skeleton';
 import {
   Link2, ShoppingBag, Briefcase, BarChart3, Wallet as WalletIcon, PackageSearch, MapPin,
-  Crown, LogOut, Menu, X, Sun, Moon, Globe, Check, Sparkles, Bell, ShoppingCart,
+  Crown, LogOut, Menu, X, Sun, Moon, Globe, Check, Sparkles, Bell, ShoppingCart, Palette,
+  ChevronLeft, ChevronRight, QrCode, Users,
 } from 'lucide-react';
 import { LandingLang } from '../../lib/landingTranslations';
 
@@ -23,8 +28,11 @@ const TABS = [
   { id: 'products',     icon: ShoppingBag,  accent: '#FF6B9D' },
   { id: 'services',     icon: Briefcase,    accent: '#00C2FF' },
   { id: 'orders',       icon: PackageSearch, accent: '#f59e0b' },
+  { id: 'themes',       icon: Palette,      accent: '#a855f7' },
+  { id: 'qrcode',       icon: QrCode,       accent: '#8B7CFF' },
   { id: 'map',          icon: MapPin,       accent: '#22c55e' },
   { id: 'statistics',   icon: BarChart3,    accent: '#00C2FF' },
+  { id: 'affiliate',    icon: Users,        accent: '#22c55e' },
   { id: 'wallet',       icon: WalletIcon,   accent: '#6C63FF' },
   { id: 'subscription', icon: Crown,        accent: '#FF6B9D' },
 ] as const;
@@ -60,6 +68,11 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabId>('biolink');
   const [loading, setLoading]     = useState(true);
   const [sideOpen, setSideOpen]   = useState(false);
+  const [sideCollapsed, setSideCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('biolinkwd_sidebar_collapsed') === '1';
+    } catch { return false; }
+  });
   const [langOpen, setLangOpen]   = useState(false);
   const [notifs, setNotifs]       = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -68,11 +81,14 @@ export default function Dashboard() {
 
   const TAB_LABELS: Record<TabId, string> = {
     biolink:      t.bioLink,
+    themes:       lang === 'fr' ? 'Thèmes' : lang === 'pt' ? 'Temas' : lang === 'de' ? 'Themen' : 'Themes',
     products:     t.products,
+    qrcode:       lang === 'fr' ? 'QR Code' : lang === 'pt' ? 'QR Code' : lang === 'de' ? 'QR-Code' : 'QR Code',
     services:     t.services,
     orders:       'Commandes',
     map:          lang === 'de' ? 'Karte' : lang === 'pt' ? 'Carte' : lang === 'en' ? 'Map' : 'Carte',
     statistics:   t.statistics,
+    affiliate:    lang === 'fr' ? 'Parrainage' : lang === 'pt' ? 'Afiliados' : lang === 'de' ? 'Empfehlungen' : 'Affiliate',
     wallet:       t.wallet,
     subscription: t.subscription,
   };
@@ -81,6 +97,14 @@ export default function Dashboard() {
     setLang(l);
     setDashLang(l as 'fr' | 'en');
     setLangOpen(false);
+  }
+
+  function toggleSideCollapsed() {
+    setSideCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('biolinkwd_sidebar_collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -160,11 +184,41 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: bg }}>
-        <div className="text-center">
-          <div className="w-10 h-10 rounded-full animate-spin mx-auto mb-4"
-            style={{ border: '3px solid rgba(108,99,255,0.15)', borderTopColor: '#6C63FF' }} />
-          <p className="text-sm font-medium" style={{ color: txtSub }}>{t.loading}</p>
+      <div className="h-screen flex overflow-hidden" style={{ background: bg }}>
+        {/* Sidebar skeleton */}
+        <aside className="hidden md:flex shrink-0 flex-col" style={{ background: surface, borderRight: `1px solid ${border}`, width: 264 }}>
+          <div className="px-6 pt-7 pb-6 flex items-center gap-3">
+            <SkelBlock className="w-10 h-10 rounded-xl" />
+            <div className="space-y-2">
+              <SkelBlock className="h-3 w-24" />
+              <SkelBlock className="h-2 w-16" />
+            </div>
+          </div>
+          <div className="flex-1 px-4 space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <SkelBlock key={i} className="h-11 w-full rounded-2xl" />
+            ))}
+          </div>
+          <div className="mx-4 mb-4"><SkelBlock className="h-24 w-full rounded-3xl" /></div>
+          <div className="mx-4 mb-5"><SkelBlock className="h-14 w-full rounded-2xl" /></div>
+        </aside>
+        {/* Main skeleton */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="h-16 border-b flex items-center justify-between px-4 md:px-8" style={{ background: surface, borderColor: border }}>
+            <SkelBlock className="h-5 w-32" />
+            <div className="flex items-center gap-2">
+              <SkelBlock className="w-9 h-9 rounded-full" />
+              <SkelBlock className="w-9 h-9 rounded-full" />
+            </div>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => <SkelBlock key={i} className="h-28 rounded-2xl" />)}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => <SkelBlock key={i} className="h-56 rounded-2xl" />)}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -185,37 +239,50 @@ export default function Dashboard() {
   const activeMeta = TABS.find(tb => tb.id === activeTab)!;
 
   /* ══════════ Sidebar ══════════ */
-  const SidebarContent = () => (
+  function formatCompactBalance(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+    if (n >= 1_000)     return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+    return `${n}`;
+  }
+
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <div className="flex flex-col h-full">
 
       {/* Logo du site */}
-      <div className="px-6 pt-7 pb-6 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className={`${collapsed ? 'px-3 pt-6 pb-5' : 'px-6 pt-7 pb-6'} shrink-0 transition-all duration-200`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
           <img src="/logo.png" alt="BioLinkWD" className="h-10 w-auto"
             style={{ filter: dk ? 'brightness(1.6)' : 'none' }}
             onError={e => { e.currentTarget.style.display = 'none'; }} />
-          <div className="leading-tight">
-            <p className="font-black text-[17px] tracking-tight" style={{ color: txtPrim }}>
-              BioLink<span style={{ color: '#6C63FF' }}>WD</span>
-            </p>
-            <p className="text-[10px] font-bold tracking-wide" style={{ color: '#FF6B9D' }}>
-              by WhiteDuckSaaS
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="leading-tight">
+              <p className="font-black text-[17px] tracking-tight" style={{ color: txtPrim }}>
+                BioLink<span style={{ color: '#6C63FF' }}>WD</span>
+              </p>
+              <p className="text-[10px] font-bold tracking-wide" style={{ color: '#FF6B9D' }}>
+                by WhiteDuckSaaS
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-4 space-y-1.5">
-        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: txtSub }}>
-          Menu
-        </p>
+      <nav className={`flex-1 min-h-0 overflow-y-auto scrollbar-hide ${collapsed ? 'px-2' : 'px-4'} space-y-1.5`}>
+        {!collapsed && (
+          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: txtSub }}>
+            Menu
+          </p>
+        )}
         {TABS.map(({ id, icon: Icon, accent }) => {
           const active = activeTab === id;
           return (
             <button key={id}
               onClick={() => { setActiveTab(id); setSideOpen(false); }}
-              className="relative w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[13.5px] font-semibold transition-all duration-200"
+              title={collapsed ? TAB_LABELS[id] : undefined}
+              className={`relative w-full flex items-center rounded-2xl text-[13.5px] font-semibold transition-all duration-200 ${
+                collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'
+              }`}
               style={{
                 background: active ? `linear-gradient(135deg,${accent},${accent}cc)` : 'transparent',
                 color: active ? '#fff' : txtSub,
@@ -224,49 +291,77 @@ export default function Dashboard() {
               onMouseEnter={e => { if (!active) e.currentTarget.style.background = hoverBg; }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
               <Icon size={17} strokeWidth={active ? 2.4 : 2} />
-              {TAB_LABELS[id]}
+              {!collapsed && TAB_LABELS[id]}
             </button>
           );
         })}
       </nav>
 
-      {/* Carte solde — gradient signature */}
-      <div className="mx-4 mb-4 rounded-3xl p-5 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg,#6C63FF 0%,#8B5FBF 55%,#FF6B9D 120%)' }}>
-        <div className="absolute -top-8 -right-8 w-28 h-28 rounded-full"
-          style={{ background: 'rgba(255,255,255,0.12)' }} />
-        <div className="absolute -bottom-10 -left-6 w-24 h-24 rounded-full"
-          style={{ background: 'rgba(255,255,255,0.07)' }} />
-        <div className="relative">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Sparkles size={12} color="rgba(255,255,255,0.8)" />
-            <p className="text-[11px] font-semibold text-white/80">{BALANCE_LABEL[lang] ?? BALANCE_LABEL.fr}</p>
+      {/* Carte solde — gradient signature (toujours visible) */}
+      {collapsed ? (
+        <button
+          onClick={() => { setActiveTab('wallet'); setSideOpen(false); }}
+          title={`${BALANCE_LABEL[lang] ?? BALANCE_LABEL.fr}: ${profile.wallet_balance.toLocaleString()} FCFA`}
+          className="mx-2 mb-3 rounded-2xl px-2 py-3 relative overflow-hidden flex flex-col items-center gap-1"
+          style={{ background: 'linear-gradient(135deg,#6C63FF 0%,#8B5FBF 55%,#FF6B9D 120%)' }}
+        >
+          <WalletIcon size={16} color="#fff" />
+          <span className="text-white font-black text-[11px] leading-none">
+            {formatCompactBalance(profile.wallet_balance)}
+          </span>
+          <span className="text-[8px] font-bold text-white/70 leading-none">FCFA</span>
+        </button>
+      ) : (
+        <div className="mx-4 mb-4 rounded-3xl p-5 relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg,#6C63FF 0%,#8B5FBF 55%,#FF6B9D 120%)' }}>
+          <div className="absolute -top-8 -right-8 w-28 h-28 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.12)' }} />
+          <div className="absolute -bottom-10 -left-6 w-24 h-24 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.07)' }} />
+          <div className="relative">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Sparkles size={12} color="rgba(255,255,255,0.8)" />
+              <p className="text-[11px] font-semibold text-white/80">{BALANCE_LABEL[lang] ?? BALANCE_LABEL.fr}</p>
+            </div>
+            <p className="text-white font-black text-[22px] leading-none">
+              {profile.wallet_balance.toLocaleString()}
+              <span className="text-[11px] font-bold text-white/70 ml-1.5">FCFA</span>
+            </p>
           </div>
-          <p className="text-white font-black text-[22px] leading-none">
-            {profile.wallet_balance.toLocaleString()}
-            <span className="text-[11px] font-bold text-white/70 ml-1.5">FCFA</span>
-          </p>
         </div>
-      </div>
+      )}
 
       {/* Utilisateur */}
-      <div className="mx-4 mb-5 flex items-center gap-3 rounded-2xl p-3 border"
-        style={{ borderColor: border, background: dk ? 'rgba(255,255,255,0.03)' : '#fdfcff' }}>
-        <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-black text-white shrink-0"
-          style={{ background: 'linear-gradient(135deg,#6C63FF,#FF6B9D)' }}>
-          {initials}
+      {collapsed ? (
+        <div className="mx-2 mb-4 flex justify-center" title={`${profile.display_name || profile.username} — ${planLabel}`}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-black text-white shrink-0 relative"
+            style={{ background: 'linear-gradient(135deg,#6C63FF,#FF6B9D)' }}>
+            {initials}
+            <span className="absolute -bottom-1 -right-1 text-[8px] font-black px-1 py-0.5 rounded-full shrink-0 border-2"
+              style={{ background: planStyle.grad, color: planStyle.text, borderColor: surface }}>
+              {planLabel.slice(0, 1).toUpperCase()}
+            </span>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-bold truncate" style={{ color: txtPrim }}>
-            {profile.display_name || profile.username}
-          </p>
-          <p className="text-[11px] truncate" style={{ color: txtSub }}>@{profile.username}</p>
+      ) : (
+        <div className="mx-4 mb-5 flex items-center gap-3 rounded-2xl p-3 border"
+          style={{ borderColor: border, background: dk ? 'rgba(255,255,255,0.03)' : '#fdfcff' }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-black text-white shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6C63FF,#FF6B9D)' }}>
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold truncate" style={{ color: txtPrim }}>
+              {profile.display_name || profile.username}
+            </p>
+            <p className="text-[11px] truncate" style={{ color: txtSub }}>@{profile.username}</p>
+          </div>
+          <span className="text-[9.5px] font-black px-2.5 py-1 rounded-full shrink-0"
+            style={{ background: planStyle.grad, color: planStyle.text }}>
+            {planLabel.toUpperCase()}
+          </span>
         </div>
-        <span className="text-[9.5px] font-black px-2.5 py-1 rounded-full shrink-0"
-          style={{ background: planStyle.grad, color: planStyle.text }}>
-          {planLabel.toUpperCase()}
-        </span>
-      </div>
+      )}
     </div>
   );
 
@@ -274,9 +369,27 @@ export default function Dashboard() {
     <div className="h-screen flex overflow-hidden" style={{ background: bg }}>
 
       {/* ══ Sidebar desktop ══ */}
-      <aside className="hidden md:flex w-[264px] shrink-0 flex-col"
-        style={{ background: surface, borderRight: `1px solid ${border}` }}>
-        <SidebarContent />
+      <aside className="hidden md:flex shrink-0 flex-col relative transition-[width] duration-300 ease-out"
+        style={{
+          background: surface,
+          borderRight: `1px solid ${border}`,
+          width: sideCollapsed ? 76 : 264,
+        }}>
+        <SidebarContent collapsed={sideCollapsed} />
+
+        {/* Toggle collapse button */}
+        <button
+          onClick={toggleSideCollapsed}
+          title={sideCollapsed ? (lang === 'fr' ? 'Développer' : 'Expand') : (lang === 'fr' ? 'Réduire' : 'Collapse')}
+          className="absolute top-8 -right-3 w-6 h-6 rounded-full flex items-center justify-center shadow-md transition-transform hover:scale-110 z-10"
+          style={{
+            background: surface,
+            border: `1px solid ${border}`,
+            color: txtSub,
+          }}
+        >
+          {sideCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+        </button>
       </aside>
 
       {/* ══ Sidebar mobile ══ */}
@@ -340,7 +453,7 @@ export default function Dashboard() {
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[340px] max-h-[420px] overflow-y-auto rounded-2xl border z-50"
+                <div className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-16 sm:top-full sm:mt-2 sm:w-[340px] max-h-[420px] overflow-y-auto rounded-2xl border z-50"
                   style={{ background: surface, borderColor: border, boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
                   <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: border }}>
                     <h3 className="font-bold text-sm" style={{ color: txtPrim }}>
@@ -446,13 +559,50 @@ export default function Dashboard() {
             {activeTab === 'biolink' && (
               <BioLink
                 profile={profile}
+                onUpdate={updates => setProfile(prev => prev ? { ...prev, ...updates } : prev)}
+                onGoToSubscription={() => setActiveTab('subscription')}
+              />
+            )}
+            {activeTab === 'themes' && (
+              <Themes
+                profile={profile}
                 products={products}
                 services={services}
-                onUpdate={updates => setProfile(prev => prev ? { ...prev, ...updates } : prev)}
+                onUpdate={p => setProfile(prev => prev ? { ...prev, ...p } : prev)}
               />
             )}
             {activeTab === 'products' && (
               <Products profile={profile} products={products} onUpdate={setProducts} />
+            )}
+            {activeTab === 'qrcode' && (
+              profile.plan_type === 'premium' ? (
+                <QrCodeTab profile={profile} />
+              ) : (
+                <div className="max-w-2xl mx-auto rounded-3xl p-8 relative overflow-hidden text-center"
+                  style={{ background: 'linear-gradient(135deg,#FF6B9D 0%,#8B5FBF 50%,#6C63FF 120%)' }}>
+                  <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }} />
+                  <div className="absolute -bottom-14 -left-8 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-4 backdrop-blur">
+                      <Crown size={28} color="#fff" />
+                    </div>
+                    <h2 className="text-2xl font-black text-white mb-2">
+                      {lang === 'fr' ? 'QR Code réservé aux Premium' : 'QR Code — Premium only'}
+                    </h2>
+                    <p className="text-white/90 text-sm mb-6 max-w-md mx-auto">
+                      {lang === 'fr'
+                        ? 'Génère un QR code personnalisé, un poster A4 imprimable pour ton échoppe, ta carte de visite ou tes flyers. Disponible sur le forfait Premium.'
+                        : 'Generate a custom QR code and a printable A4 poster for your shop, business card or flyers. Available on the Premium plan.'}
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('subscription')}
+                      className="px-6 py-3 rounded-full font-bold bg-white text-sm shadow-lg hover:scale-105 transition-transform"
+                      style={{ color: '#6C63FF' }}>
+                      {lang === 'fr' ? 'Passer au Premium' : 'Upgrade to Premium'}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
             {activeTab === 'services' && (
               <Services profile={profile} services={services} onUpdate={setServices} />
@@ -460,6 +610,12 @@ export default function Dashboard() {
             {activeTab === 'orders' && <Orders profile={profile} />}
             {activeTab === 'map' && <DashboardMap profile={profile} products={products} />}
             {activeTab === 'statistics' && <Statistics profile={profile} />}
+            {activeTab === 'affiliate' && (
+              <Affiliate
+                profile={profile}
+                onUpdate={updates => setProfile(prev => prev ? { ...prev, ...updates } : prev)}
+              />
+            )}
             {activeTab === 'wallet' && (
               <Wallet
                 profile={profile}

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Profile, Product, ProductReview } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
+import { useAppPrefs } from '../../lib/AppPrefsContext';
+import { SHOP_THEMES, ShopThemeConfig } from '../../lib/planLimits';
 import { supabase } from '../../lib/supabase';
+import { weightedRating } from '../../lib/ratingUtils';
 import {
   ArrowLeft, ArrowLeft as PrevIcon, ArrowRight as NextIcon, ShoppingBag, ShoppingCart, Star, Store,
-  ShieldCheck, Check, Package, Truck, RotateCcw, Lock, CreditCard, MessageSquareText,
+  ShieldCheck, Check, Package, Truck, RotateCcw, Lock, CreditCard, MessageSquareText, Eye,
 } from 'lucide-react';
 
 interface ProductDetailPageProps {
@@ -24,6 +27,15 @@ export default function ProductDetailPage({
   product, seller, interactive, previewMode, onBack, onAddToCart, onBuyNow, onRated,
 }: ProductDetailPageProps) {
   const { lang } = useLang();
+  const { isDark: dk } = useAppPrefs();
+  const shopTheme: ShopThemeConfig = SHOP_THEMES[seller.theme ?? 'default'] ?? SHOP_THEMES.default;
+  const themeDark = shopTheme.inherentlyDark ? true : (shopTheme.pageBgLight === null ? false : dk);
+  const pick = (dark: string, light: string | null) => light === null ? dark : (themeDark ? dark : light);
+  const stPageBg = pick(shopTheme.pageBg, shopTheme.pageBgLight);
+  const stCardBg = pick(shopTheme.cardBg, shopTheme.cardBgLight);
+  const stCardBorder = pick(shopTheme.cardBorder, shopTheme.cardBorderLight);
+  const stText = pick(shopTheme.textColor, shopTheme.textColorLight);
+  const stSubtext = pick(shopTheme.subtextColor, shopTheme.subtextColorLight);
   const forceMobile = previewMode === 'mobile';
   const forceDesktop = previewMode === 'desktop';
   const gridClass = forceDesktop
@@ -54,8 +66,9 @@ export default function ProductDetailPage({
   const shopDisplayName = seller.shop_name || seller.display_name || seller.username || 'Boutique';
   const isFree = (seller.plan_type ?? 'free') === 'free';
   const outOfStock = product.quantity <= 0;
-  const displayAvg = product.avg_rating || 0;
+  const displayAvg = weightedRating(product.avg_rating, product.ratings_count);
   const displayCount = product.ratings_count || 0;
+  const viewCount = product.view_count || 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -129,14 +142,15 @@ export default function ProductDetailPage({
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-full px-4 pt-2 pb-16">
+    <div className="max-w-6xl mx-auto w-full px-4 pt-2 pb-16" style={{ background: stPageBg }}>
       <button onClick={onBack}
-        className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 mb-5">
+        className="flex items-center gap-1.5 text-xs font-semibold mb-5 transition-opacity hover:opacity-80"
+        style={{ color: stSubtext }}>
         <ArrowLeft size={14} />
         {lang === 'fr' ? 'Retour à la boutique' : 'Back to shop'}
       </button>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 md:p-6">
+      <div className="rounded-3xl shadow-sm border p-4 md:p-6" style={{ background: stCardBg, borderColor: stCardBorder }}>
         <div className={gridClass}>
 
           {/* ══ Galerie — miniatures à gauche, photo principale avec flèches ══ */}
@@ -146,29 +160,32 @@ export default function ProductDetailPage({
                 {gallery.map((img, i) => (
                   <button key={i} onClick={() => setActiveImg(i)}
                     className="aspect-square rounded-xl overflow-hidden border-2 transition shrink-0"
-                    style={{ borderColor: activeImg === i ? '#6C63FF' : '#e5e7eb' }}>
+                    style={{ borderColor: activeImg === i ? '#6C63FF' : stCardBorder }}>
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
             )}
 
-            <div className="relative flex-1 aspect-square rounded-2xl overflow-hidden bg-gray-100 flex items-center justify-center">
+            <div className="relative flex-1 aspect-square rounded-2xl overflow-hidden flex items-center justify-center"
+              style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
               {gallery[activeImg] ? (
                 <img src={gallery[activeImg]} alt={product.name} className="w-full h-full object-cover" />
               ) : (
-                <ShoppingBag size={48} className="text-gray-300" />
+                <ShoppingBag size={48} style={{ color: stSubtext }} />
               )}
 
               {gallery.length > 1 && (
                 <>
                   <button onClick={goPrev}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition">
-                    <PrevIcon size={16} className="text-gray-700" />
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full shadow-md flex items-center justify-center transition"
+                    style={{ background: themeDark ? 'rgba(30,30,45,0.9)' : 'rgba(255,255,255,0.9)' }}>
+                    <PrevIcon size={16} style={{ color: stText }} />
                   </button>
                   <button onClick={goNext}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 shadow-md flex items-center justify-center hover:bg-white transition">
-                    <NextIcon size={16} className="text-gray-700" />
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full shadow-md flex items-center justify-center transition"
+                    style={{ background: themeDark ? 'rgba(30,30,45,0.9)' : 'rgba(255,255,255,0.9)' }}>
+                    <NextIcon size={16} style={{ color: stText }} />
                   </button>
                   <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                     {activeImg + 1}/{gallery.length}
@@ -180,24 +197,33 @@ export default function ProductDetailPage({
 
           {/* ══ Section infos produit ══ */}
           <div>
-            <h1 className="text-xl font-black text-gray-900 leading-snug mb-2">{product.name}</h1>
+            <h1 className="text-xl font-black leading-snug mb-2" style={{ color: stText }}>{product.name}</h1>
+
+            {viewCount >= 10 && (
+              <div className="flex items-center gap-1 mb-2 text-[11px] font-semibold" style={{ color: stSubtext }}>
+                <Eye size={11} />
+                {viewCount} {lang === 'fr' ? 'vues' : lang === 'en' ? 'views' : lang === 'pt' ? 'visualizações' : 'Aufrufe'}
+              </div>
+            )}
 
             <div className="flex items-center gap-2 mb-4">
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map(n => (
                   <Star key={n} size={16}
-                    className={n <= Math.round(displayAvg) ? 'text-amber-400 fill-current' : 'text-gray-200 fill-current'} />
+                    className={n <= Math.round(displayAvg)
+                      ? 'text-amber-400 fill-current'
+                      : (themeDark ? 'text-gray-700 fill-current' : 'text-gray-200 fill-current')} />
                 ))}
               </div>
-              <span className="text-sm font-bold text-gray-700">{displayAvg.toFixed(1)}</span>
-              <span className="text-xs text-gray-400">
+              <span className="text-sm font-bold" style={{ color: stText }}>{displayAvg.toFixed(1)}</span>
+              <span className="text-xs" style={{ color: stSubtext }}>
                 ({displayCount} {lang === 'fr' ? 'avis' : displayCount > 1 ? 'reviews' : 'review'})
               </span>
             </div>
 
             <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-3xl font-black text-red-600">{product.price.toLocaleString()}</span>
-              <span className="text-sm font-bold text-red-500">{product.currency}</span>
+              <span className="text-3xl font-black" style={{ color: shopTheme.priceColor }}>{product.price.toLocaleString()}</span>
+              <span className="text-sm font-bold" style={{ color: shopTheme.priceColor, opacity: 0.85 }}>{product.currency}</span>
             </div>
 
             <div className="mb-5">
@@ -212,35 +238,36 @@ export default function ProductDetailPage({
               )}
             </div>
 
-            <p className="text-sm text-gray-600 leading-relaxed mb-6">
+            <p className="text-sm leading-relaxed mb-6" style={{ color: stSubtext }}>
               {product.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
             </p>
 
             {/* Vendeur */}
-            <div className="rounded-2xl border border-gray-100 p-4 flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
+            <div className="rounded-2xl border p-4 flex items-center gap-3 mb-6" style={{ borderColor: stCardBorder }}>
+              <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
                 {seller.shop_logo_url ? (
                   <img src={seller.shop_logo_url} alt={shopDisplayName} className="w-full h-full object-cover" />
                 ) : isFree ? (
                   <img src="/logo.png" alt="BioLinkWD" className="w-full h-full object-contain p-1.5"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
-                  <Store size={20} className="text-gray-400" />
+                  <Store size={20} style={{ color: stSubtext }} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-bold text-gray-900 truncate">{shopDisplayName}</p>
+                  <p className="text-sm font-bold truncate" style={{ color: stText }}>{shopDisplayName}</p>
                   {!isFree && <ShieldCheck size={13} className="text-blue-500 shrink-0" />}
                 </div>
-                <p className="text-xs text-gray-400">@{seller.username}</p>
+                <p className="text-xs" style={{ color: stSubtext }}>@{seller.username}</p>
               </div>
             </div>
 
             {/* ══ Avis clients ══ */}
-            <div className="rounded-2xl border border-gray-100 p-4">
+            <div className="rounded-2xl border p-4" style={{ borderColor: stCardBorder }}>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <p className="text-sm font-bold flex items-center gap-2" style={{ color: stText }}>
                   <MessageSquareText size={15} />
                   {lang === 'fr' ? 'Avis clients' : 'Customer reviews'} ({displayCount})
                 </p>
@@ -249,7 +276,7 @@ export default function ProductDetailPage({
               {/* Noter */}
               {!myReviewSubmitted && interactive && !showReviewForm && (
                 <div className="mb-4">
-                  <p className="text-xs font-semibold text-gray-500 mb-1.5">
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: stSubtext }}>
                     {lang === 'fr' ? 'Noter ce produit' : 'Rate this product'}
                   </p>
                   <div className="flex items-center gap-1">
@@ -259,7 +286,9 @@ export default function ProductDetailPage({
                         onMouseLeave={() => setHoverStar(0)}
                         onClick={() => openReviewForm(n)}>
                         <Star size={22}
-                          className={n <= hoverStar ? 'text-amber-400 fill-current' : 'text-gray-300 fill-current'} />
+                          className={n <= hoverStar
+                            ? 'text-amber-400 fill-current'
+                            : (themeDark ? 'text-gray-700 fill-current' : 'text-gray-300 fill-current')} />
                       </button>
                     ))}
                   </div>
@@ -267,28 +296,34 @@ export default function ProductDetailPage({
               )}
 
               {showReviewForm && (
-                <form onSubmit={submitReview} className="mb-4 space-y-2.5 bg-gray-50 rounded-xl p-3.5">
+                <form onSubmit={submitReview} className="mb-4 space-y-2.5 rounded-xl p-3.5"
+                  style={{ background: themeDark ? 'rgba(255,255,255,0.04)' : '#f9fafb' }}>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5].map(n => (
                       <button key={n} type="button" onClick={() => setPendingRating(n)}>
-                        <Star size={18} className={n <= pendingRating ? 'text-amber-400 fill-current' : 'text-gray-300 fill-current'} />
+                        <Star size={18} className={n <= pendingRating
+                          ? 'text-amber-400 fill-current'
+                          : (themeDark ? 'text-gray-700 fill-current' : 'text-gray-300 fill-current')} />
                       </button>
                     ))}
                   </div>
                   <input value={authorName} onChange={e => setAuthorName(e.target.value)}
                     placeholder={lang === 'fr' ? 'Votre nom (optionnel)' : 'Your name (optional)'}
-                    className="w-full rounded-lg px-3 py-2 text-xs border border-gray-200 outline-none focus:border-brand-violet" />
+                    className="w-full rounded-lg px-3 py-2 text-xs border outline-none focus:border-brand-violet"
+                    style={{ borderColor: stCardBorder, background: 'transparent', color: stText }} />
                   <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3}
                     placeholder={lang === 'fr' ? 'Votre avis sur ce produit...' : 'Your feedback on this product...'}
-                    className="w-full rounded-lg px-3 py-2 text-xs border border-gray-200 outline-none resize-none focus:border-brand-violet" />
+                    className="w-full rounded-lg px-3 py-2 text-xs border outline-none resize-none focus:border-brand-violet"
+                    style={{ borderColor: stCardBorder, background: 'transparent', color: stText }} />
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setShowReviewForm(false)}
-                      className="flex-1 text-xs font-semibold py-2 rounded-lg bg-white border border-gray-200 text-gray-500">
+                      className="flex-1 text-xs font-semibold py-2 rounded-lg border"
+                      style={{ background: 'transparent', borderColor: stCardBorder, color: stSubtext }}>
                       {lang === 'fr' ? 'Annuler' : 'Cancel'}
                     </button>
                     <button type="submit" disabled={submitting}
                       className="flex-1 text-xs font-bold py-2 rounded-lg text-white disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                      style={{ background: shopTheme.buttonGradient }}>
                       {submitting ? '...' : (lang === 'fr' ? 'Publier' : 'Submit')}
                     </button>
                   </div>
@@ -304,26 +339,29 @@ export default function ProductDetailPage({
               {/* Liste des avis */}
               {loadingReviews ? (
                 <div className="py-6 flex justify-center">
-                  <div className="w-5 h-5 border-2 border-gray-200 border-t-brand-violet rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 rounded-full animate-spin"
+                    style={{ borderColor: stCardBorder, borderTopColor: '#6C63FF' }} />
                 </div>
               ) : reviews.length === 0 ? (
-                <p className="text-xs text-gray-400 py-2">
+                <p className="text-xs py-2" style={{ color: stSubtext }}>
                   {lang === 'fr' ? 'Aucun avis pour le moment. Soyez le premier à en laisser un !' : 'No reviews yet. Be the first!'}
                 </p>
               ) : (
                 <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                   {reviews.map(r => (
-                    <div key={r.id} className="border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+                    <div key={r.id} className="border-t pt-3 first:border-t-0 first:pt-0" style={{ borderColor: stCardBorder }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-gray-900">{r.author_name}</span>
+                        <span className="text-xs font-bold" style={{ color: stText }}>{r.author_name}</span>
                         <div className="flex items-center gap-0.5">
                           {[1, 2, 3, 4, 5].map(n => (
-                            <Star key={n} size={10} className={n <= r.rating ? 'text-amber-400 fill-current' : 'text-gray-200 fill-current'} />
+                            <Star key={n} size={10} className={n <= r.rating
+                              ? 'text-amber-400 fill-current'
+                              : (themeDark ? 'text-gray-700 fill-current' : 'text-gray-200 fill-current')} />
                           ))}
                         </div>
                       </div>
-                      {r.comment && <p className="text-xs text-gray-600 leading-relaxed">{r.comment}</p>}
-                      <p className="text-[10px] text-gray-400 mt-0.5">{new Date(r.created_at).toLocaleDateString()}</p>
+                      {r.comment && <p className="text-xs leading-relaxed" style={{ color: stSubtext }}>{r.comment}</p>}
+                      <p className="text-[10px] mt-0.5" style={{ color: stSubtext, opacity: 0.75 }}>{new Date(r.created_at).toLocaleDateString()}</p>
                     </div>
                   ))}
                 </div>
@@ -337,24 +375,28 @@ export default function ProductDetailPage({
             <div className="space-y-2.5">
               <button onClick={() => onBuyNow(product)} disabled={outOfStock || !interactive}
                 className="w-full py-3 rounded-2xl text-sm font-bold text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                style={{ background: shopTheme.buttonGradient }}>
                 {lang === 'fr' ? 'Commander maintenant' : 'Buy now'}
               </button>
               <button onClick={handleAddToCart} disabled={outOfStock || !interactive}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ borderColor: '#6C63FF', color: added ? '#fff' : '#6C63FF', background: added ? '#22c55e' : 'transparent' }}>
+                style={{
+                  borderColor: shopTheme.accentColor ?? '#6C63FF',
+                  color: added ? '#fff' : (shopTheme.accentColor ?? '#6C63FF'),
+                  background: added ? '#22c55e' : 'transparent',
+                }}>
                 {added ? <Check size={15} /> : <ShoppingCart size={15} />}
                 {added ? (lang === 'fr' ? 'Ajouté !' : 'Added!') : (lang === 'fr' ? 'Ajouter au panier' : 'Add to cart')}
               </button>
             </div>
 
             {/* Expédition */}
-            <div className="rounded-2xl border border-gray-100 p-4">
+            <div className="rounded-2xl border p-4" style={{ borderColor: stCardBorder }}>
               <div className="flex items-center gap-2 mb-2">
-                <Truck size={15} className="text-gray-500" />
-                <p className="text-sm font-bold text-gray-900">{lang === 'fr' ? 'Expédition' : 'Shipping'}</p>
+                <Truck size={15} style={{ color: stSubtext }} />
+                <p className="text-sm font-bold" style={{ color: stText }}>{lang === 'fr' ? 'Expédition' : 'Shipping'}</p>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="text-xs leading-relaxed" style={{ color: stSubtext }}>
                 {lang === 'fr'
                   ? 'Frais de livraison et date à négocier directement avec le vendeur après votre commande.'
                   : 'Shipping fees and delivery date to arrange directly with the seller after your order.'}
@@ -362,24 +404,24 @@ export default function ProductDetailPage({
             </div>
 
             {/* Paiement sécurisé */}
-            <div className="rounded-2xl border border-gray-100 p-4">
+            <div className="rounded-2xl border p-4" style={{ borderColor: stCardBorder }}>
               <div className="flex items-center gap-2 mb-3">
-                <Lock size={15} className="text-emerald-600" />
-                <p className="text-sm font-bold text-gray-900">{lang === 'fr' ? 'Paiements sécurisés' : 'Secure payments'}</p>
+                <Lock size={15} className="text-emerald-500" />
+                <p className="text-sm font-bold" style={{ color: stText }}>{lang === 'fr' ? 'Paiements sécurisés' : 'Secure payments'}</p>
               </div>
               <div className="flex items-center gap-2 mb-3">
-                <CreditCard size={16} className="text-gray-400" />
-                <span className="text-[11px] font-semibold text-gray-500">Visa · Mastercard · MTN · Orange</span>
+                <CreditCard size={16} style={{ color: stSubtext }} />
+                <span className="text-[11px] font-semibold" style={{ color: stSubtext }}>Visa · Mastercard · MTN · Orange</span>
               </div>
               <div className="flex items-start gap-2 mb-2.5">
-                <ShieldCheck size={14} className="text-emerald-600 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-gray-500 leading-relaxed">
+                <ShieldCheck size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                <p className="text-[11px] leading-relaxed" style={{ color: stSubtext }}>
                   {lang === 'fr' ? 'Protection des commandes garantie sur BioLinkWD.' : 'Order protection guaranteed on BioLinkWD.'}
                 </p>
               </div>
               <div className="flex items-start gap-2">
-                <RotateCcw size={14} className="text-emerald-600 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-gray-500 leading-relaxed">
+                <RotateCcw size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                <p className="text-[11px] leading-relaxed" style={{ color: stSubtext }}>
                   {lang === 'fr' ? 'Protection de remboursement si la commande n\'est pas livrée.' : 'Refund protection if your order isn\'t delivered.'}
                 </p>
               </div>

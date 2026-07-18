@@ -19,14 +19,39 @@ export interface Profile {
   contact_phone: string;
   mtn_number: string;
   orange_number: string;
+  whatsapp_number: string;
+  whatsapp_enabled: boolean;
+  whatsapp_greeting: string;
+  trust_badges?: { icon: string; label: string }[];
+  announcement_text?: string;
+  announcement_active?: boolean;
+  announcement_expires_at?: string | null;
+  product_categories?: string[];
   is_admin: boolean;
   avatar_url: string;
   theme: string;
   plan_type: PlanType;
   social_links: SocialLink[];
   wallet_balance: number;
+  referral_code?: string;
+  referred_by?: string | null;
+  affiliate_balance?: number;
+  lifetime_affiliate_earned?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AffiliateCommission {
+  id: string;
+  referrer_id: string;
+  referred_id: string;
+  subscription_amount: number;
+  commission_amount: number;
+  commission_rate: number;
+  currency: string;
+  plan_type: string;
+  earned_at: string;
+  paid_out: boolean;
 }
 
 export interface Product {
@@ -45,6 +70,8 @@ export interface Product {
   location_lat: number | null;
   location_lng: number | null;
   location_address: string;
+  view_count?: number;
+  category?: string;
   created_at: string;
   updated_at: string;
 }

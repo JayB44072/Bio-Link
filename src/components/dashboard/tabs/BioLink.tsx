@@ -1,22 +1,28 @@
 import React, { useState, useRef } from 'react';
-import { Profile, SocialLink, Product, Service } from '../../../lib/types';
-import { PLAN_CONFIGS, THEMES, SOCIAL_PLATFORMS, SHOP_THEMES } from '../../../lib/planLimits';
+import { Profile, SocialLink } from '../../../lib/types';
+import { PLAN_CONFIGS, SOCIAL_PLATFORMS } from '../../../lib/planLimits';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
-import PublicProfileView from '../../public/PublicProfileView';
 import {
   Lock, Plus, Trash2, Check, Copy, ExternalLink, Crown, Upload, Loader2, Store, Link2, MessageCircle,
+  ShieldCheck, Truck, Award, RefreshCw, Sparkles, Zap, Megaphone,
 } from 'lucide-react';
+
+interface TrustBadgeOption {
+  icon: string;
+  label: string;
+  Ico: React.ComponentType<{ size?: number; className?: string }>;
+}
+
 
 interface BioLinkProps {
   profile: Profile;
-  products: Product[];
-  services: Service[];
   onUpdate: (p: Partial<Profile>) => void;
+  onGoToSubscription?: () => void;
 }
 
-export default function BioLink({ profile, products, services, onUpdate }: BioLinkProps) {
+export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLinkProps) {
   const { t, lang } = useLang();
   const { isDark: dk } = useAppPrefs();
   const [form, setForm] = useState({
@@ -27,19 +33,25 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
     contact_phone: profile.contact_phone,
     theme: profile.theme,
     social_links: [...(profile.social_links || [])] as SocialLink[],
+    whatsapp_enabled: profile.whatsapp_enabled ?? false,
+    whatsapp_number: profile.whatsapp_number ?? '',
+    whatsapp_greeting: profile.whatsapp_greeting ?? '',
+    trust_badges: (profile.trust_badges ?? []) as { icon: string; label: string }[],
+    announcement_active: profile.announcement_active ?? false,
+    announcement_text: profile.announcement_text ?? '',
+    announcement_expires_at: profile.announcement_expires_at ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [premiumModalOpen, setPremiumModalOpen] = useState(false);
-  const [attemptedPremiumTheme, setAttemptedPremiumTheme] = useState('');
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const plan = PLAN_CONFIGS[profile.plan_type];
-  const canCustomizeTheme = plan.custom_themes;
   const canUseLogo = plan.shop_logo;
+  const canPublish = profile.plan_type !== 'free';
   const maxSocial = plan.max_social_links;
   const atSocialLimit = maxSocial !== null && form.social_links.length >= maxSocial;
   const publicUrl = `${window.location.origin}/u/${profile.username}`;
@@ -132,42 +144,58 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
     updateForm('social_links', form.social_links.filter((_, i) => i !== idx));
   }
 
-  function handleThemeSelect(themeId: string) {
-    const selectedTheme = THEMES.find(t => t.id === themeId);
-    if (selectedTheme?.premium && profile.plan_type !== 'premium') {
-      setAttemptedPremiumTheme(themeId);
-      setPremiumModalOpen(true);
-      return;
-    }
-    updateForm('theme', themeId);
+  function toggleTrustBadge(icon: string, label: string) {
+    setForm(prev => {
+      const has = prev.trust_badges.some(b => b.icon === icon);
+      const next = has
+        ? prev.trust_badges.filter(b => b.icon !== icon)
+        : [...prev.trust_badges, { icon, label }];
+      onUpdate({ trust_badges: next });
+      return { ...prev, trust_badges: next };
+    });
   }
 
   async function handleSave() {
     setSaving(true);
+    const payload = {
+      ...form,
+      announcement_expires_at: form.announcement_expires_at
+        ? new Date(form.announcement_expires_at).toISOString()
+        : null,
+      updated_at: new Date().toISOString(),
+    };
     const { error } = await supabase
       .from('profiles')
-      .update({ ...form, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('user_id', profile.user_id);
     setSaving(false);
     if (!error) {
       setSaved(true);
-      onUpdate(form);
+      onUpdate(payload);
       setTimeout(() => setSaved(false), 2000);
     }
   }
 
   function handleCopy() {
+    if (!canPublish) {
+      setPaywallOpen(true);
+      return;
+    }
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const previewProfile = { ...profile, ...form };
+  function handleVisitPublic(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!canPublish) {
+      e.preventDefault();
+      setPaywallOpen(true);
+    }
+  }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Form */}
-      <div className="flex-1 space-y-6">
+    <div className="max-w-2xl mx-auto">
+      <div className="space-y-6">
 
         {/* ══ Carte Mon lien bio — mise en avant ══ */}
         <div className="rounded-3xl p-5 md:p-6 relative overflow-hidden"
@@ -200,13 +228,14 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
                 {copied ? t.copied : t.copyLink}
               </button>
               <a
-                href={publicUrl}
-                target="_blank"
+                href={canPublish ? publicUrl : '#'}
+                target={canPublish ? '_blank' : undefined}
                 rel="noopener noreferrer"
+                onClick={handleVisitPublic}
                 className="flex-1 flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-2xl transition-all border-2"
                 style={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff' }}
               >
-                <ExternalLink size={15} />
+                {canPublish ? <ExternalLink size={15} /> : <Lock size={14} />}
                 {t.visitPublicPage}
               </a>
             </div>
@@ -339,69 +368,6 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
           </div>
         </div>
 
-        {/* Theme */}
-        <div>
-          <label className={labelCls} style={{ color: txtLabel }}>{t.theme}</label>
-          {!canCustomizeTheme && (
-            <div className="flex items-start gap-2 rounded-xl px-4 py-3 mb-3"
-              style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)' }}>
-              <Lock size={14} className="text-amber-500 mt-0.5 shrink-0" />
-              <p className="text-amber-500 text-xs font-medium">{t.themeLockedMsg}</p>
-            </div>
-          )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {THEMES.map(theme => {
-              const isLocked = !canCustomizeTheme && !theme.free;
-              const isPremiumTheme = theme.premium;
-              const disabled = isLocked || (isPremiumTheme && profile.plan_type !== 'premium');
-              const selected = form.theme === theme.id;
-              return (
-                <button
-                  key={theme.id}
-                  onClick={() => handleThemeSelect(theme.id)}
-                  disabled={disabled}
-                  className={`group relative rounded-2xl overflow-hidden transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
-                  style={{
-                    border: `2px solid ${selected ? '#6C63FF' : (dk ? 'rgba(255,255,255,0.08)' : '#eeecfb')}`,
-                    background: surface,
-                    boxShadow: selected ? '0 6px 18px rgba(108,99,255,0.25)' : 'none',
-                  }}
-                  title={isPremiumTheme ? 'Premium uniquement' : ''}
-                >
-                  {/* Color swatch preview */}
-                  <div className={`h-14 w-full relative ${theme.bg}`}>
-                    {(isLocked || isPremiumTheme) && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/35">
-                        {isPremiumTheme ? <Crown size={15} className="text-yellow-300" /> : <Lock size={15} className="text-white" />}
-                      </div>
-                    )}
-                    {selected && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
-                        style={{ background: '#6C63FF' }}>
-                        <Check size={11} className="text-white" strokeWidth={3} />
-                      </div>
-                    )}
-                    {/* Palette dots for themes with custom shop config */}
-                    {SHOP_THEMES[theme.id] && SHOP_THEMES[theme.id] !== SHOP_THEMES.default && (
-                      <div className="absolute bottom-1.5 left-1.5 flex gap-1">
-                        {[SHOP_THEMES[theme.id].pageBg, SHOP_THEMES[theme.id].priceColor, SHOP_THEMES[theme.id].cardBg].map((c, ci) => (
-                          <div key={ci} className="w-3 h-3 rounded-full border border-white/30" style={{ background: c }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {/* Label */}
-                  <div className="py-2 px-1">
-                    <span className="text-xs font-semibold" style={{ color: selected ? '#6C63FF' : txtPrim }}>
-                      {theme.label[lang as 'fr' | 'en']}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Social Links */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -481,6 +447,221 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
           )}
         </div>
 
+        {/* ══ Carte Commande via WhatsApp ══ */}
+        <div className="rounded-3xl p-5" style={{ background: surface, border: `1px solid ${border}` }}>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(37,211,102,0.15)' }}>
+                <MessageCircle size={17} style={{ color: '#25D366' }} />
+              </span>
+              <div>
+                <h2 className="font-black text-base leading-tight" style={{ color: txtPrim }}>
+                  {lang === 'fr' ? 'Commande via WhatsApp' : 'Order via WhatsApp'}
+                </h2>
+                <p className="text-[11px] mt-0.5" style={{ color: txtSub }}>
+                  {lang === 'fr'
+                    ? 'Recevez les commandes directement sur WhatsApp — booste vos conversions !'
+                    : 'Receive orders directly on WhatsApp — boost your conversions!'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.whatsapp_enabled}
+              onClick={() => updateForm('whatsapp_enabled', !form.whatsapp_enabled)}
+              className="relative shrink-0 w-11 h-6 rounded-full transition-colors"
+              style={{ background: form.whatsapp_enabled ? '#25D366' : (dk ? 'rgba(255,255,255,0.14)' : '#e5e7eb') }}
+            >
+              <span
+                className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                style={{ left: form.whatsapp_enabled ? '22px' : '2px' }}
+              />
+            </button>
+          </div>
+
+          <div className={form.whatsapp_enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
+            <div className="mb-4">
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? 'Numéro WhatsApp (format international)' : 'WhatsApp number (international format)'}
+              </label>
+              <input
+                type="tel"
+                value={form.whatsapp_number}
+                onChange={e => updateForm('whatsapp_number', e.target.value)}
+                placeholder="+225 07 00 00 00"
+                className={inputCls}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+              <p className="text-[11px] mt-1.5" style={{ color: txtSub }}>
+                {lang === 'fr'
+                  ? 'Incluez l\'indicatif pays, ex: +2250712345678'
+                  : 'Include the country code, e.g. +2250712345678'}
+              </p>
+            </div>
+
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? 'Message d\'accueil (optionnel)' : 'Greeting message (optional)'}
+              </label>
+              <textarea
+                value={form.whatsapp_greeting}
+                onChange={e => updateForm('whatsapp_greeting', e.target.value)}
+                placeholder={lang === 'fr'
+                  ? 'Bonjour, je souhaite passer commande sur votre boutique.'
+                  : 'Hello, I would like to place an order on your shop.'}
+                rows={2}
+                className={`${inputCls} resize-none`}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+              <p className="text-[11px] mt-1.5" style={{ color: txtSub }}>
+                {lang === 'fr'
+                  ? 'Ce message sera pré-rempli avec les articles du panier avant l\'envoi.'
+                  : 'This message will be pre-filled with cart items before sending.'}
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-xl p-3 flex items-start gap-2"
+              style={{ background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)' }}>
+              <MessageCircle size={14} style={{ color: '#25D366' }} className="shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed" style={{ color: dk ? '#a7f3d0' : '#166534' }}>
+                {lang === 'fr'
+                  ? 'Disponible sur tous les forfaits — y compris gratuit. Les acheteurs verront un bouton vert "Commander via WhatsApp" sur votre boutique.'
+                  : 'Available on all plans — free included. Buyers will see a green "Order via WhatsApp" button on your shop.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ══ Badges de confiance — attribués automatiquement ══ */}
+        <div className="rounded-3xl p-5" style={{ background: surface, border: `1px solid ${border}` }}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(108,99,255,0.15)' }}>
+              <ShieldCheck size={17} style={{ color: '#6C63FF' }} />
+            </span>
+            <div>
+              <h2 className="font-black text-base leading-tight" style={{ color: txtPrim }}>
+                {lang === 'fr' ? 'Badges de confiance' : 'Trust badges'}
+              </h2>
+              <p className="text-[11px] mt-0.5" style={{ color: txtSub }}>
+                {lang === 'fr'
+                  ? 'Attribués automatiquement selon vos performances. Impossible de les activer manuellement — c\'est la garantie de leur crédibilité.'
+                  : 'Awarded automatically based on your performance. They cannot be self-declared — that\'s what makes them credible.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              { icon: 'shield', Ico: ShieldCheck,
+                labelFr: 'Vendeur vérifié', labelEn: 'Verified seller',
+                critFr: 'Forfait payant OU 5+ commandes livrées',
+                critEn: 'Paid plan OR 5+ completed orders' },
+              { icon: 'truck', Ico: ShieldCheck,
+                labelFr: 'Expédition rapide', labelEn: 'Fast shipping',
+                critFr: 'Temps d\'expédition médian < 24h (5+ commandes)',
+                critEn: 'Median ship time < 24h (5+ orders)' },
+              { icon: 'award', Ico: ShieldCheck,
+                labelFr: 'Top vendeur', labelEn: 'Top seller',
+                critFr: '20+ commandes livrées',
+                critEn: '20+ completed orders' },
+              { icon: 'zap', Ico: ShieldCheck,
+                labelFr: 'Réactif', labelEn: 'Active seller',
+                critFr: 'Connecté au moins une fois cette semaine',
+                critEn: 'Active within the last 7 days' },
+              { icon: 'refresh', Ico: ShieldCheck,
+                labelFr: 'Fiable', labelEn: 'Reliable',
+                critFr: 'Moins de 5% d\'annulations (10+ commandes)',
+                critEn: 'Under 5% cancellation rate (10+ orders)' },
+            ].map(b => (
+              <div key={b.icon} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
+                style={{ background: inputBg, border: `1px solid ${inputBorder}` }}>
+                <b.Ico size={14} style={{ color: '#6C63FF' }} className="shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold" style={{ color: txtPrim }}>{lang === 'fr' ? b.labelFr : b.labelEn}</p>
+                  <p className="text-[10px]" style={{ color: txtSub }}>{lang === 'fr' ? b.critFr : b.critEn}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ══ Bannière d'annonce (Feature 5) ══ */}
+        <div className="rounded-3xl p-5" style={{ background: surface, border: `1px solid ${border}` }}>
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(236,72,153,0.15)' }}>
+                <Megaphone size={17} style={{ color: '#EC4899' }} />
+              </span>
+              <div>
+                <h2 className="font-black text-base leading-tight" style={{ color: txtPrim }}>
+                  {lang === 'fr' ? 'Afficher une annonce' : 'Show an announcement'}
+                </h2>
+                <p className="text-[11px] mt-0.5" style={{ color: txtSub }}>
+                  {lang === 'fr'
+                    ? 'Communiquez une promo ou une info importante en haut de la boutique.'
+                    : 'Broadcast a promo or key info at the top of the shop.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.announcement_active}
+              onClick={() => updateForm('announcement_active', !form.announcement_active)}
+              className="relative shrink-0 w-11 h-6 rounded-full transition-colors"
+              style={{ background: form.announcement_active ? '#EC4899' : (dk ? 'rgba(255,255,255,0.14)' : '#e5e7eb') }}
+            >
+              <span
+                className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                style={{ left: form.announcement_active ? '22px' : '2px' }}
+              />
+            </button>
+          </div>
+
+          <div className={form.announcement_active ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
+            <div className="mb-4">
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? "Message d'annonce" : 'Announcement message'}
+              </label>
+              <textarea
+                value={form.announcement_text}
+                onChange={e => updateForm('announcement_text', e.target.value.slice(0, 140))}
+                maxLength={140}
+                rows={2}
+                placeholder={lang === 'fr'
+                  ? "Promo -20% ce week-end sur toute la boutique !"
+                  : '20% off this weekend on the whole shop!'}
+                className={`${inputCls} resize-none`}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+              <p className="text-[11px] mt-1.5 text-right" style={{ color: txtSub }}>
+                {form.announcement_text.length}/140
+              </p>
+            </div>
+
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? "Date d'expiration (optionnel)" : 'Expiration date (optional)'}
+              </label>
+              <input
+                type="datetime-local"
+                value={form.announcement_expires_at
+                  ? new Date(form.announcement_expires_at).toISOString().slice(0, 16)
+                  : ''}
+                onChange={e => updateForm('announcement_expires_at', e.target.value)}
+                className={inputCls}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+              <p className="text-[11px] mt-1.5" style={{ color: txtSub }}>
+                {lang === 'fr'
+                  ? "Laissez vide pour afficher l'annonce jusqu'à ce que vous la désactiviez."
+                  : 'Leave empty to keep the announcement live until you turn it off.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Save button */}
         <button
           onClick={handleSave}
@@ -498,58 +679,34 @@ export default function BioLink({ profile, products, services, onUpdate }: BioLi
         </button>
       </div>
 
-      {/* Preview — aperçu réel de la page publique, inversé selon l'appareil :
-          sur PC on montre le rendu téléphone, sur mobile on montre le rendu bureau. */}
-      <div className="lg:w-80 flex flex-col gap-3">
-        <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: txtSub }}>
-          <Link2 size={12} />
-          {lang === 'fr' ? 'Aperçu en direct de votre page publique' : 'Live preview of your public page'}
-        </p>
-
-        {/* ── Sur PC (md+) : cadre téléphone ── */}
-        <div className="hidden md:flex justify-center">
-          <div className="relative w-[375px] h-[700px] bg-gray-900 rounded-[2.5rem] border-[6px] border-gray-800 shadow-2xl overflow-hidden shrink-0">
-            <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-16 h-4 bg-gray-800 rounded-full z-20" />
-            <div className="w-full h-full overflow-y-auto scrollbar-hide">
-              <PublicProfileView profile={previewProfile} products={products} services={services} interactive={false} previewMode="mobile" />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Sur mobile (<md) : rendu bureau, sans cadre ── */}
-        <div className="md:hidden w-full rounded-2xl overflow-hidden border shadow-xl" style={{ borderColor: border }}>
-          <div className="h-[520px] overflow-y-auto scrollbar-hide">
-            <PublicProfileView profile={previewProfile} products={products} services={services} interactive={false} previewMode="desktop" />
-          </div>
-        </div>
-      </div>
-
-      {/* Premium modal */}
-      {premiumModalOpen && (
+      {/* Paywall modal for copy/view public buttons */}
+      {paywallOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="rounded-2xl p-8 max-w-sm text-center shadow-2xl" style={{ background: surface, border: '1px solid rgba(251,191,36,0.3)' }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(251,191,36,0.15)' }}>
-              <Crown size={24} className="text-yellow-400" />
+          <div className="rounded-2xl p-8 max-w-sm text-center shadow-2xl" style={{ background: surface, border: '1px solid rgba(108,99,255,0.3)' }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(108,99,255,0.15)' }}>
+              <Crown size={24} style={{ color: '#6C63FF' }} />
             </div>
-            <h3 className="font-bold text-lg mb-2" style={{ color: txtPrim }}>{lang === 'fr' ? 'Thème Premium' : 'Premium Theme'}</h3>
+            <h3 className="font-bold text-lg mb-2" style={{ color: txtPrim }}>
+              {lang === 'fr' ? 'Publiez votre boutique' : 'Publish your shop'}
+            </h3>
             <p className="text-sm leading-relaxed mb-6" style={{ color: txtSub }}>
               {lang === 'fr'
-                ? `Le thème "${THEMES.find(t => t.id === attemptedPremiumTheme)?.label.fr}" est réservé aux forfaits Premium. Passez à la version Premium pour l'activer.`
-                : `The "${THEMES.find(t => t.id === attemptedPremiumTheme)?.label.en}" theme is reserved for Premium plans. Upgrade to Premium to activate it.`}
+                ? "Créez un compte Starter, Business ou Premium pour partager le lien de votre boutique et la rendre visible au public. Vous pouvez déjà personnaliser votre boutique librement dans l'aperçu !"
+                : "Upgrade to Starter, Business, or Premium to share your shop link and make it public. You can already customize your shop freely in the preview!"}
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setPremiumModalOpen(false)}
+              <button onClick={() => setPaywallOpen(false)}
                 className="flex-1 text-sm font-medium py-2.5 rounded-xl transition"
                 style={{ background: surfaceAlt, color: txtSub }}>
                 {t.cancel}
               </button>
               <button
-                onClick={() => setPremiumModalOpen(false)}
+                onClick={() => { setPaywallOpen(false); onGoToSubscription?.(); }}
                 className="flex-1 text-white text-sm font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}
+                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}
               >
                 <Crown size={14} />
-                {lang === 'fr' ? 'Passer au Premium' : 'Upgrade'}
+                {lang === 'fr' ? 'Voir les forfaits' : 'See plans'}
               </button>
             </div>
           </div>

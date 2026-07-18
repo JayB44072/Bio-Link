@@ -5,15 +5,61 @@ import { useAppPrefs } from '../../lib/AppPrefsContext';
 import { PLAN_CONFIGS, SHOP_THEMES, ShopThemeConfig } from '../../lib/planLimits';
 import { LandingLang } from '../../lib/landingTranslations';
 import { supabase } from '../../lib/supabase';
-import PurchaseModal, { CartItem } from './PurchaseModal';
+import { weightedRating } from '../../lib/ratingUtils';
+import PurchaseModal, { CartItem, buildWhatsAppOrderUrl } from './PurchaseModal';
 import ProductDetailPage from './ProductDetailPage';
 import ProductsMap from '../ui/ProductsMap';
+import LiveSalesToast from './LiveSalesToast';
+import { computeSellerBadges, ComputedBadge } from '../../lib/trustBadges';
 import {
   Instagram, Music, Facebook, Twitter, Youtube, Linkedin,
   MessageCircle, Send, Globe, ShoppingBag, Briefcase, ExternalLink, Link2,
   Sparkles, ArrowRight, Star, Clock, Search, ShoppingCart, Plus, Minus, X, Store, Check, Menu, PackageSearch,
   Sun, Moon, Package, Truck, CheckCircle2, Loader2, ShieldCheck, MapPin, LucideIcon,
+  Eye, Megaphone, Award, RefreshCw, Zap, Smartphone, CreditCard,
 } from 'lucide-react';
+
+const BADGE_ICON_MAP: Record<string, LucideIcon> = {
+  shield: ShieldCheck,
+  truck: Truck,
+  award: Award,
+  refresh: RefreshCw,
+  sparkles: Sparkles,
+  zap: Zap,
+};
+
+function BadgeIcon({ icon, size = 12 }: { icon: string; size?: number }) {
+  const Ico = BADGE_ICON_MAP[icon] || Sparkles;
+  return <Ico size={size} />;
+}
+
+function formatCountdown(iso: string, lang: LandingLang): string | null {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 0) return null;
+  const mins = Math.floor(diffMs / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  const h = hours % 24;
+  const m = mins % 60;
+  if (lang === 'fr') {
+    if (days > 0) return `Se termine dans ${days}j ${h}h`;
+    if (hours > 0) return `Se termine dans ${hours}h ${m}min`;
+    return `Se termine dans ${mins} min`;
+  }
+  if (lang === 'en') {
+    if (days > 0) return `Ends in ${days}d ${h}h`;
+    if (hours > 0) return `Ends in ${hours}h ${m}min`;
+    return `Ends in ${mins} min`;
+  }
+  if (lang === 'pt') {
+    if (days > 0) return `Termina em ${days}d ${h}h`;
+    if (hours > 0) return `Termina em ${hours}h ${m}min`;
+    return `Termina em ${mins} min`;
+  }
+  if (days > 0) return `Endet in ${days} T. ${h} Std.`;
+  if (hours > 0) return `Endet in ${hours} Std. ${m} Min.`;
+  return `Endet in ${mins} Min.`;
+}
 
 const LANG_OPTIONS: { code: LandingLang; label: string }[] = [
   { code: 'fr', label: '🇫🇷 Français'  },
@@ -78,6 +124,21 @@ export default function PublicProfileView({ profile, products, services, interac
   const forceMobile = previewMode === 'mobile';
   const forceDesktop = previewMode === 'desktop';
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
+  const [computedBadges, setComputedBadges] = useState<ComputedBadge[]>([]);
+
+  useEffect(() => {
+    if (!profile.user_id) return;
+    (async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('id, status, created_at, shipped_at')
+        .eq('seller_id', profile.user_id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      const txs = (data || []) as Transaction[];
+      setComputedBadges(computeSellerBadges(profile as Profile, txs));
+    })();
+  }, [profile.user_id, profile.plan_type, profile.updated_at]);
   const [viewingProductId, setViewingProductId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
@@ -85,6 +146,7 @@ export default function PublicProfileView({ profile, products, services, interac
   const [checkoutItem, setCheckoutItem] = useState<Product | null>(null);
   const [checkoutSource, setCheckoutSource] = useState<'buyNow' | 'cart' | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const viewingProduct = viewingProductId ? localProducts.find(p => p.id === viewingProductId) ?? null : null;
 
   useEffect(() => { setLocalProducts(products); }, [products]);
@@ -119,6 +181,8 @@ export default function PublicProfileView({ profile, products, services, interac
 
   /* ══ Suivi de commande — recherche par téléphone + détail, tout en ligne ══ */
   const [trackingPhone, setTrackingPhone] = useState('');
+  const [trackingCardLast4, setTrackingCardLast4] = useState('');
+  const [trackingMethod, setTrackingMethod] = useState<'mobile' | 'card'>('mobile');
   const [trackingOrders, setTrackingOrders] = useState<Transaction[] | null>(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingSearched, setTrackingSearched] = useState(false);
@@ -129,16 +193,25 @@ export default function PublicProfileView({ profile, products, services, interac
 
   async function searchOrders(e: React.FormEvent) {
     e.preventDefault();
-    if (!trackingPhone.trim()) return;
+    if (trackingMethod === 'mobile' && !trackingPhone.trim()) return;
+    if (trackingMethod === 'card' && trackingCardLast4.replace(/\D/g, '').length !== 4) return;
     setTrackingLoading(true);
     setTrackingSearched(true);
     setSelectedOrderId(null);
-    const { data } = await supabase
+    const q = supabase
       .from('transactions')
       .select('*')
-      .eq('buyer_phone', trackingPhone.trim())
       .eq('seller_id', profile.user_id || '')
       .order('created_at', { ascending: false });
+    if (trackingMethod === 'mobile') {
+      q.eq('buyer_phone', trackingPhone.trim());
+    } else {
+      // For card orders, we need to look up by payment_method + a card identifier.
+      // Since we don't currently store card details for security, filter by payment_method='card'
+      // and by buyer_phone as fallback (phone was also captured on the card form).
+      q.eq('payment_method', 'card').eq('buyer_phone', trackingCardLast4.replace(/\D/g, ''));
+    }
+    const { data } = await q;
     setTrackingOrders((data as Transaction[]) || []);
     setTrackingLoading(false);
   }
@@ -160,11 +233,26 @@ export default function PublicProfileView({ profile, products, services, interac
     setConfirmingDelivery(false);
   }
 
+  const distinctCategories = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of activeProducts) {
+      const c = (p.category || '').trim();
+      if (c) seen.add(c);
+    }
+    return Array.from(seen);
+  }, [activeProducts]);
+
   const filteredProducts = useMemo(() => {
-    if (!search.trim()) return activeProducts;
-    const q = search.toLowerCase();
-    return activeProducts.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-  }, [activeProducts, search]);
+    let list = activeProducts;
+    if (activeCategory) {
+      list = list.filter(p => (p.category || '').trim() === activeCategory);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
+    }
+    return list;
+  }, [activeProducts, search, activeCategory]);
 
   const filteredServices = useMemo(() => {
     if (!search.trim()) return activeServices;
@@ -176,11 +264,9 @@ export default function PublicProfileView({ profile, products, services, interac
 
   /* ══ Shop theme resolution ══ */
   const shopTheme: ShopThemeConfig = SHOP_THEMES[profile.theme ?? 'default'] ?? SHOP_THEMES.default;
-  /* For themes with inherentlyDark=true, the visitor's dark/light toggle has no effect.
-     For themes with separate light values (pageBgLight != null), the toggle picks the variant.
-     For themes where light values are null (elegance, modern, nature, luxury, neon),
-     the theme is self-contained — its own colors are used regardless of toggle. */
-  const themeDark = shopTheme.inherentlyDark ? true : (shopTheme.pageBgLight === null ? false : dk);
+  /* Dark/light toggle respected on every theme.
+     Only inherently-dark themes (luxury) ignore the toggle and stay dark. */
+  const themeDark = shopTheme.inherentlyDark ? true : dk;
   const pick = (dark: string, light: string | null) => light === null ? dark : (themeDark ? dark : light);
 
   const stPageBg = pick(shopTheme.pageBg, shopTheme.pageBgLight);
@@ -253,6 +339,20 @@ export default function PublicProfileView({ profile, products, services, interac
     setLocalProducts(prev => prev.map(p => p.id === productId ? { ...p, avg_rating: avgRating, ratings_count: ratingsCount } : p));
   }
 
+  function openProduct(product: Product) {
+    if (!interactive) return;
+    setViewingProductId(product.id);
+    // Fire-and-forget view counter — never blocks navigation
+    supabase.rpc('increment_product_view', { p_id: product.id }).then(
+      () => {},
+      () => {},
+    );
+    // Reflect the +1 locally so the badge stays in sync
+    setLocalProducts(prev => prev.map(p =>
+      p.id === product.id ? { ...p, view_count: (p.view_count || 0) + 1 } : p,
+    ));
+  }
+
   function handleBuyNow(product: Product) {
     setCheckoutItem(product);
     setCheckoutSource('buyNow');
@@ -321,22 +421,24 @@ export default function PublicProfileView({ profile, products, services, interac
       style={{ background: stPageBg }}>
 
       {/* ══ Formes décoratives d'arrière-plan selon le thème ══ */}
-      {(profile.theme === 'modern') && (
-        <>
-          <div className="absolute top-0 right-0 w-[60%] h-[350px] rounded-bl-[100px] pointer-events-none z-0" style={{ background: 'linear-gradient(135deg,#e8c99b,#d4a574)' }} />
-          <div className="absolute top-[200px] left-0 w-[40%] h-[250px] rounded-tr-[80px] pointer-events-none z-0" style={{ background: 'rgba(232,201,155,0.3)' }} />
-        </>
-      )}
       {(profile.theme === 'luxury') && (
         <>
           <div className="absolute top-0 left-0 w-full h-[300px] pointer-events-none z-0" style={{ background: 'linear-gradient(180deg,rgba(201,169,110,0.08) 0%,transparent 100%)' }} />
           <div className="absolute bottom-0 right-0 w-[200px] h-[200px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(201,169,110,0.06) 0%,transparent 70%)' }} />
         </>
       )}
-      {(profile.theme === 'neon') && (
+      {(profile.theme === 'vintage') && (
+        <div
+          className="absolute inset-0 pointer-events-none z-0 opacity-40"
+          style={{
+            backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(139,90,43,0.06) 0, transparent 40%), radial-gradient(circle at 80% 60%, rgba(139,90,43,0.05) 0, transparent 40%), radial-gradient(circle at 40% 80%, rgba(139,90,43,0.05) 0, transparent 40%)',
+          }}
+        />
+      )}
+      {(profile.theme === 'modern') && (
         <>
-          <div className="absolute top-[100px] right-[10%] w-[300px] h-[300px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(0,255,136,0.04) 0%,transparent 70%)' }} />
-          <div className="absolute bottom-[200px] left-[5%] w-[250px] h-[250px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(0,204,255,0.04) 0%,transparent 70%)' }} />
+          <div className="absolute top-0 right-0 w-[45%] h-[280px] pointer-events-none z-0 opacity-70" style={{ background: 'radial-gradient(ellipse at top right, #e8c99b 0%, transparent 65%)' }} />
+          <div className="absolute top-[120px] left-0 w-[35%] h-[220px] pointer-events-none z-0 opacity-50" style={{ background: 'radial-gradient(ellipse at bottom left, #d4a574 0%, transparent 60%)' }} />
         </>
       )}
 
@@ -552,6 +654,42 @@ export default function PublicProfileView({ profile, products, services, interac
       ) : (
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 pt-6 pb-20 relative z-10">
 
+        {/* ══ Bannière d'annonce (Feature 5) — tout en haut de l'onglet Boutique ══ */}
+        {currentTab === 'shop' && profile.announcement_active && profile.announcement_text
+          && (!profile.announcement_expires_at || new Date(profile.announcement_expires_at) > new Date()) && (
+          <div
+            className="mb-4 rounded-2xl px-4 py-3 flex items-start gap-3 shadow-sm"
+            style={{ background: shopTheme.buttonGradient, color: '#fff' }}
+          >
+            <Megaphone size={16} className="shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold leading-snug">{profile.announcement_text}</p>
+              {profile.announcement_expires_at && (
+                <p className="text-[11px] mt-0.5 opacity-90">
+                  {formatCountdown(profile.announcement_expires_at, lang)}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══ Badges de confiance — calculés automatiquement depuis les stats du vendeur ══ */}
+        {currentTab === 'shop' && computedBadges.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {computedBadges.map((b, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border"
+                style={{ background: stCardBg, borderColor: stCardBorder, color: stText }}
+                title={lang === 'fr' ? 'Badge attribué automatiquement selon les performances du vendeur' : 'Badge automatically awarded based on seller performance'}
+              >
+                <BadgeIcon icon={b.icon} size={12} />
+                {lang === 'fr' ? b.labelFr : b.labelEn}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* ══ Bannière promotionnelle — thème Modern ══ */}
         {profile.theme === 'modern' && currentTab === 'shop' && activeProducts.length > 0 && (
           <div className="mb-6 rounded-3xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg,#d4a574,#e8c99b,#f0dcc0)', minHeight: '140px' }}>
@@ -561,6 +699,55 @@ export default function PublicProfileView({ profile, products, services, interac
               <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">{shopDisplayName}</h2>
               <p className="text-xs text-white/80 mt-1">{lang === 'fr' ? `${activeProducts.length} produits disponibles` : `${activeProducts.length} products available`}</p>
             </div>
+          </div>
+        )}
+
+        {/* ══ Bannière "SHOP" — thème Coral (theme6) ══ */}
+        {profile.theme === 'coral' && currentTab === 'shop' && activeProducts.length > 0 && (
+          <div className="mb-6 rounded-lg overflow-hidden relative flex" style={{ minHeight: '150px' }}>
+            <div className="w-2/5" style={{ background: '#f9c9b8' }} />
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6" style={{ background: '#f0f0f0' }}>
+              <h2 className="text-3xl sm:text-4xl font-black tracking-wider" style={{ color: '#2b2b2b' }}>SHOP</h2>
+              <p className="text-xs mt-2" style={{ color: '#8b8b8b' }}>
+                {lang === 'fr' ? `${shopDisplayName} • Tous les produits` : `${shopDisplayName} • All products`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ══ Bannière promo — thème Tech (theme7 Boulanger style) ══ */}
+        {profile.theme === 'tech' && currentTab === 'shop' && activeProducts.length > 0 && (
+          <div className="mb-6 rounded-3xl overflow-hidden relative flex flex-col sm:flex-row items-stretch" style={{ background: '#f0f7ff', minHeight: '160px' }}>
+            <div className="flex-1 p-5 sm:p-7 flex flex-col justify-center">
+              <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: '#0a67c2' }}>
+                {lang === 'fr' ? 'Offres du moment' : "Today's offers"}
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-black leading-tight" style={{ color: '#0a67c2' }}>{shopDisplayName}</h2>
+              <p className="text-xs mt-1.5" style={{ color: '#0a67c2' }}>
+                {lang === 'fr' ? `${activeProducts.length} produits disponibles` : `${activeProducts.length} products available`}
+              </p>
+            </div>
+            <div className="hidden sm:block w-1/3 relative" style={{ background: '#0a67c2' }}>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-full h-full rounded-l-[80px]" style={{ background: '#0a67c2' }} />
+              </div>
+              <div className="absolute top-1/2 right-6 -translate-y-1/2 px-5 py-2.5 rounded-full font-bold text-sm shadow-lg" style={{ background: '#ffffff', color: '#e85a15' }}>
+                {lang === 'fr' ? 'Voir tout' : 'See all'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ Bannière burgundy — thème Burgundy (theme8) ══ */}
+        {profile.theme === 'burgundy' && currentTab === 'shop' && activeProducts.length > 0 && (
+          <div className="mb-6 rounded-lg overflow-hidden relative p-6 sm:p-8" style={{ background: 'linear-gradient(135deg,#7a1a29,#5a1220)', minHeight: '140px' }}>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/70 mb-1">
+              {lang === 'fr' ? 'Collection exclusive' : 'Exclusive collection'}
+            </p>
+            <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">{shopDisplayName}</h2>
+            <p className="text-xs text-white/80 mt-1.5 max-w-md">
+              {lang === 'fr' ? 'Découvrez notre sélection de produits soigneusement choisis.' : 'Discover our carefully curated product selection.'}
+            </p>
           </div>
         )}
 
@@ -609,77 +796,339 @@ export default function PublicProfileView({ profile, products, services, interac
           </div>
         )}
 
+        {/* ══ Filtre par catégorie (Feature 6) — visible si ≥ 2 catégories distinctes ══ */}
+        {currentTab === 'shop' && activeProducts.length > 0 && distinctCategories.length >= 2 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setActiveCategory(null)}
+              className="px-3 py-1.5 rounded-full text-xs font-bold transition"
+              style={activeCategory === null
+                ? { background: shopTheme.buttonGradient, color: '#fff' }
+                : { background: stCardBg, color: stSubtext, border: `1px solid ${stCardBorder}` }}
+            >
+              {lang === 'fr' ? 'Tout' : lang === 'en' ? 'All' : lang === 'pt' ? 'Tudo' : 'Alle'}
+            </button>
+            {distinctCategories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className="px-3 py-1.5 rounded-full text-xs font-bold transition"
+                style={activeCategory === cat
+                  ? { background: shopTheme.buttonGradient, color: '#fff' }
+                  : { background: stCardBg, color: stSubtext, border: `1px solid ${stCardBorder}` }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Boutique produits */}
         {currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className={`grid ${forceMobile ? 'grid-cols-2' : shopTheme.gridCols} gap-4`}>
-            {filteredProducts.map((product, i) => (
-              <div key={product.id}
-                className={`group flex flex-col border ${shopTheme.cardRadius} overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5`}
-                style={{ ...cardBgStyle, boxShadow: shopTheme.cardShadow }}>
-                <button
-                  onClick={() => setViewingProductId(product.id)}
-                  className={`aspect-square overflow-hidden relative w-full text-left ${shopTheme.imageRadius === 'rounded-full' ? 'p-4' : ''}`}
-                  style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name}
-                      className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${shopTheme.imageRadius}`} />
-                  ) : (
-                    <div className={`w-full h-full flex items-center justify-center ${shopTheme.imageRadius}`}
-                      style={{ background: themeDark ? 'linear-gradient(135deg,#1a1a2e,#0d0d1a)' : 'linear-gradient(135deg,#e5e7eb,#f3f4f6)' }}>
-                      <ShoppingBag size={32} style={{ color: stSubtext }} />
+          <div className={`grid grid-cols-2 ${forceMobile ? '' : shopTheme.gridCols.replace(/^grid-cols-\d+\s*/, '')} gap-4`}>
+            {filteredProducts.map((product, i) => {
+              const isLuxury = profile.theme === 'luxury';
+              const isMarketplace = profile.theme === 'marketplace';
+              const isTech = profile.theme === 'tech';
+              const isCoral = profile.theme === 'coral';
+              const isModern = profile.theme === 'modern';
+              const isVintage = profile.theme === 'vintage';
+              const isBurgundy = profile.theme === 'burgundy';
+              const isElegance = profile.theme === 'elegance';
+
+              // Marketplace: no card background/border, price on top-left
+              if (isMarketplace) {
+                return (
+                  <div key={product.id}
+                    onClick={() => openProduct(product)}
+                    className="group flex flex-col text-left h-full cursor-pointer">
+                    <div className="aspect-square overflow-hidden relative w-full text-left rounded-lg bg-gray-200">
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ShoppingBag size={32} style={{ color: stSubtext }} />
+                        </div>
+                      )}
+                      {product.quantity <= 0 && (
+                        <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md">
+                          {lang === 'fr' ? 'Épuisé' : 'Sold out'}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {product.quantity <= 0 && (
-                    <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md">
-                      {lang === 'fr' ? 'Épuisé' : 'Sold out'}
+                    <div className="pt-2 flex-1 flex flex-col">
+                      <p className="text-base font-black" style={{ color: stText }}>
+                        {product.price.toLocaleString()} {product.currency}
+                      </p>
+                      <p className="text-sm mt-0.5 line-clamp-1" style={{ color: stText }}>{product.name}</p>
+                      <p className="text-[11px] mt-0.5 line-clamp-2 min-h-[32px]" style={{ color: stSubtext }}>
+                        {product.description || product.location_address || (lang === 'fr' ? 'Boutique en ligne' : 'Online shop')}
+                      </p>
+                      <button
+                        onClick={e => { e.stopPropagation(); addToCart(product); }}
+                        disabled={product.quantity <= 0 || !interactive}
+                        className="mt-auto w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{
+                          background: addedId === product.id ? '#22c55e' : '#e4e6eb',
+                          color: addedId === product.id ? '#fff' : '#050505',
+                        }}>
+                        {addedId === product.id ? <Check size={12} /> : <ShoppingCart size={12} />}
+                        {addedId === product.id
+                          ? (lang === 'fr' ? 'Ajouté !' : 'Added!')
+                          : (lang === 'fr' ? 'Ajouter au panier' : 'Add to cart')}
+                      </button>
                     </div>
-                  )}
-                  {i === 0 && product.quantity > 0 && (
-                    <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md flex items-center gap-0.5">
-                      <Sparkles size={10} /><span>New</span>
-                    </div>
-                  )}
-                </button>
-                <div className="p-3.5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold line-clamp-1 transition-colors" style={{ color: stText }}>{product.name}</h3>
-                    <p className="text-[11px] mt-1 line-clamp-2 leading-relaxed h-8" style={{ color: stSubtext }}>
-                      {product.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
-                    </p>
                   </div>
-                  <div className="mt-4 flex flex-col gap-2">
-                    <div className="flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <Star key={n} size={10}
-                          className={n <= Math.round(product.avg_rating || 0) ? 'text-amber-500 fill-current' : 'text-gray-300 fill-current'} />
-                      ))}
-                      <span className="text-[9px] ml-1 font-semibold" style={{ color: stSubtext }}>
-                        {(product.avg_rating || 0).toFixed(1)} ({product.ratings_count || 0})
-                      </span>
+                );
+              }
+
+              // Luxury: circular product image with gold ring
+              if (isLuxury) {
+                return (
+                  <div key={product.id}
+                    onClick={() => openProduct(product)}
+                    className={`group flex flex-col h-full ${shopTheme.cardRadius} overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1.5 p-4 items-center cursor-pointer`}
+                    style={{ ...cardBgStyle, borderWidth: 1, borderStyle: 'solid', boxShadow: shopTheme.cardShadow }}>
+                    <div
+                      className="relative w-32 h-32 sm:w-36 sm:h-36 rounded-full overflow-hidden shrink-0"
+                      style={{ boxShadow: '0 0 0 3px #0a0a0a, 0 0 0 5px #C9A96E, 0 8px 24px rgba(0,0,0,0.5)' }}
+                    >
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-black">
+                          <ShoppingBag size={28} style={{ color: '#C9A96E' }} />
+                        </div>
+                      )}
+                      {product.quantity <= 0 && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="text-[10px] font-black text-white uppercase tracking-wider">
+                            {lang === 'fr' ? 'Épuisé' : 'Sold out'}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-sm font-extrabold tracking-tight" style={{ color: shopTheme.priceColor }}>
+                    <div className="mt-4 flex-1 w-full flex flex-col items-center text-center">
+                      <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: stText }}>{product.name}</h3>
+                      <p className="text-[10px] mt-1 line-clamp-2 min-h-[28px] max-w-[80%]" style={{ color: stSubtext }}>
+                        {product.description || (lang === 'fr' ? 'Aucune description.' : 'No description.')}
+                      </p>
+                      <div className="flex items-center gap-0.5 mt-2">
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <Star key={n} size={9}
+                            className={n <= Math.round(weightedRating(product.avg_rating, product.ratings_count)) ? 'text-amber-500 fill-current' : 'text-gray-600 fill-current'} />
+                        ))}
+                      </div>
+                      <span className="text-base font-black tracking-tight mt-2" style={{ color: shopTheme.priceColor }}>
                         {product.price.toLocaleString()} <span className="text-[10px]">{product.currency}</span>
                       </span>
+                      <button
+                        onClick={e => { e.stopPropagation(); addToCart(product); }}
+                        disabled={product.quantity <= 0 || !interactive}
+                        className="mt-auto w-full flex items-center justify-center gap-1.5 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{
+                          background: addedId === product.id ? '#22c55e' : shopTheme.buttonGradient,
+                          color: '#fff',
+                        }}>
+                        {addedId === product.id ? <Check size={12} /> : <ShoppingCart size={12} />}
+                        {addedId === product.id
+                          ? (lang === 'fr' ? 'Ajouté' : 'Added')
+                          : (lang === 'fr' ? 'Ajouter' : 'Add')}
+                      </button>
                     </div>
-                    <button
-                      onClick={() => addToCart(product)}
-                      disabled={product.quantity <= 0 || !interactive}
-                      className={`mt-1 w-full flex items-center justify-center gap-1.5 py-2 ${shopTheme.cardRadius} text-xs font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed`}
-                      style={{
-                        background: addedId === product.id ? '#22c55e' : shopTheme.buttonGradient,
-                        color: '#fff',
-                        transform: addedId === product.id ? 'scale(1.04)' : 'scale(1)',
-                      }}>
-                      {addedId === product.id ? <Check size={13} /> : <ShoppingCart size={13} />}
-                      {addedId === product.id
-                        ? (lang === 'fr' ? 'Ajouté !' : 'Added!')
-                        : (lang === 'fr' ? 'Ajouter au panier' : 'Add to cart')}
-                    </button>
+                  </div>
+                );
+              }
+
+              // Default & other themes: shared card layout with theme-specific decorations
+              const showStrike = shopTheme.priceStyle === 'strikethrough-sale' && i % 3 === 0; // decorative: mark first-of-three as sale
+              const strikePrice = showStrike ? Math.round(product.price * 1.35) : null;
+
+              return (
+                <div key={product.id}
+                  onClick={() => openProduct(product)}
+                  className={`group flex flex-col border ${shopTheme.cardRadius} overflow-hidden text-left transition-all duration-300 transform hover:-translate-y-1 relative cursor-pointer`}
+                  style={{ ...cardBgStyle, boxShadow: shopTheme.cardShadow }}>
+
+                  {/* Modern (theme2): curved beige shape behind image */}
+                  {isModern && (
+                    <div className="absolute top-0 left-0 right-0 h-[55%] pointer-events-none rounded-t-3xl overflow-hidden">
+                      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 50% 100%, #f0dcc0 0%, #fbe6c9 40%, #fff3dc 90%)' }} />
+                      <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-50" style={{ background: 'radial-gradient(circle, #e8c99b 0%, transparent 70%)' }} />
+                    </div>
+                  )}
+
+                  {/* Vintage (theme9): tan bottom section */}
+                  {isVintage && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[42%] pointer-events-none" style={{ background: '#f0e6d0' }} />
+                  )}
+
+                  <div
+                    className="aspect-square overflow-hidden relative w-full text-left z-10"
+                    style={{
+                      background: isModern ? 'transparent'
+                        : isVintage ? 'transparent'
+                        : themeDark ? '#1a1a2e' : '#f3f4f6',
+                    }}>
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name}
+                        className={`w-full h-full transition-transform duration-500 group-hover:scale-105 ${isElegance || isMarketplace ? 'object-cover' : 'object-contain p-3'}`} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ShoppingBag size={32} style={{ color: stSubtext }} />
+                      </div>
+                    )}
+
+                    {product.quantity <= 0 && (
+                      <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md z-20">
+                        {lang === 'fr' ? 'Épuisé' : 'Sold out'}
+                      </div>
+                    )}
+
+                    {/* Coral (theme6): green/red sale badge circle top-right */}
+                    {isCoral && product.quantity > 0 && i % 4 === 0 && (
+                      <div className="absolute top-2 right-2 w-11 h-11 rounded-full flex items-center justify-center shadow-md z-20"
+                        style={{ background: '#5cbf7a' }}>
+                        <div className="text-white text-[9px] font-black leading-none text-center">
+                          20%<br />OFF
+                        </div>
+                      </div>
+                    )}
+                    {isCoral && product.quantity > 0 && i % 5 === 0 && i % 4 !== 0 && (
+                      <div className="absolute top-2 right-2 w-11 h-11 rounded-full flex items-center justify-center shadow-md z-20"
+                        style={{ background: '#ff7a5c' }}>
+                        <span className="text-white text-[9px] font-black uppercase">SALE</span>
+                      </div>
+                    )}
+
+                    {/* Vintage (theme9): dark rounded discount badge */}
+                    {isVintage && product.quantity > 0 && i % 4 === 0 && (
+                      <div className="absolute top-2 right-2 w-10 h-10 rounded-full flex items-center justify-center shadow-md z-20"
+                        style={{ background: '#2b1a0a' }}>
+                        <span className="text-white text-[9px] font-black">-15%</span>
+                      </div>
+                    )}
+
+                    {/* Burgundy ribbon */}
+                    {isBurgundy && product.quantity > 0 && i === 0 && (
+                      <div className="absolute top-3 -left-1 px-3 py-1 shadow-md z-20"
+                        style={{ background: '#7a1a29', color: 'white', clipPath: 'polygon(0 0, 100% 0, 92% 50%, 100% 100%, 0 100%)' }}>
+                        <span className="text-[9px] font-black uppercase tracking-wider">New</span>
+                      </div>
+                    )}
+
+                    {i === 0 && product.quantity > 0 && !isCoral && !isVintage && !isBurgundy && (
+                      <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md flex items-center gap-0.5 z-20">
+                        <Sparkles size={10} /><span>New</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3.5 flex-1 flex flex-col justify-between relative z-10">
+                    <div>
+                      <h3 className={`text-sm font-bold line-clamp-1 transition-colors ${isElegance ? 'text-center' : ''}`} style={{ color: stText }}>{product.name}</h3>
+                      <p className={`text-[11px] mt-1 line-clamp-2 leading-relaxed min-h-[32px] ${isElegance ? 'text-center' : ''}`} style={{ color: stSubtext }}>
+                        {product.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
+                      </p>
+                    </div>
+                    <div className="mt-auto pt-3 flex flex-col gap-2">
+                      <div className={`flex items-center gap-0.5 ${isElegance ? 'justify-center' : ''}`}>
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <Star key={n} size={10}
+                            className={n <= Math.round(weightedRating(product.avg_rating, product.ratings_count))
+                              ? 'text-amber-500 fill-current'
+                              : (themeDark ? 'text-gray-700 fill-current' : 'text-gray-300 fill-current')} />
+                        ))}
+                        <span className="text-[9px] ml-1 font-semibold" style={{ color: stSubtext }}>
+                          ({product.ratings_count || 0})
+                        </span>
+                        {(product.view_count ?? 0) >= 10 && (
+                          <span className="text-[9px] ml-2 font-semibold flex items-center gap-0.5" style={{ color: stSubtext }}>
+                            <Eye size={9} /> {product.view_count} {lang === 'fr' ? 'vues' : lang === 'en' ? 'views' : lang === 'pt' ? 'visualizações' : 'Aufrufe'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className={`flex items-center ${shopTheme.cartButtonStyle === 'floating-circle' ? 'justify-between' : ''} ${isElegance ? 'justify-center' : ''} gap-2 mt-0.5`}>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-sm font-extrabold tracking-tight" style={{ color: shopTheme.priceColor }}>
+                            {product.price.toLocaleString()} <span className="text-[10px]">{product.currency}</span>
+                          </span>
+                          {strikePrice && (
+                            <span className="text-[10px] line-through" style={{ color: stSubtext }}>
+                              {strikePrice.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tech (theme7): floating orange cart button */}
+                        {shopTheme.cartButtonStyle === 'floating-circle' && (
+                          <button
+                            onClick={e => { e.stopPropagation(); addToCart(product); }}
+                            disabled={product.quantity <= 0 || !interactive}
+                            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-md transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed hover:scale-110"
+                            style={{
+                              background: addedId === product.id ? '#22c55e' : shopTheme.buttonGradient,
+                              color: '#fff',
+                            }}>
+                            {addedId === product.id ? <Check size={14} /> : <ShoppingCart size={14} />}
+                          </button>
+                        )}
+
+                        {/* Coral (theme6): small orange cart button inline */}
+                        {shopTheme.cartButtonStyle === 'inline' && (
+                          <button
+                            onClick={e => { e.stopPropagation(); addToCart(product); }}
+                            disabled={product.quantity <= 0 || !interactive}
+                            className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 shadow-sm transition disabled:opacity-40"
+                            style={{
+                              background: addedId === product.id ? '#22c55e' : '#ff7a5c',
+                              color: '#fff',
+                            }}>
+                            {addedId === product.id ? <Check size={11} /> : <ShoppingCart size={11} />}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Standard below-card cart button */}
+                      {shopTheme.cartButtonStyle !== 'floating-circle' && shopTheme.cartButtonStyle !== 'inline' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); addToCart(product); }}
+                          disabled={product.quantity <= 0 || !interactive}
+                          className={`mt-1 w-full flex items-center justify-center gap-1.5 py-2 ${shopTheme.cardRadius === 'rounded-none' ? 'rounded-none' : 'rounded-xl'} text-xs font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed`}
+                          style={{
+                            background: addedId === product.id ? '#22c55e' : shopTheme.buttonGradient,
+                            color: '#fff',
+                            transform: addedId === product.id ? 'scale(1.04)' : 'scale(1)',
+                          }}>
+                          {addedId === product.id ? <Check size={13} /> : <ShoppingCart size={13} />}
+                          {addedId === product.id
+                            ? (lang === 'fr' ? 'Ajouté !' : 'Added!')
+                            : isBurgundy
+                              ? (lang === 'fr' ? 'Sélectionner' : 'Select options')
+                              : (lang === 'fr' ? 'Ajouter au panier' : 'Add to cart')}
+                        </button>
+                      )}
+
+                      {/* When floating/inline cart is used, also add a subtle full-width add button for accessibility on non-tech themes */}
+                      {shopTheme.cartButtonStyle === 'inline' && (
+                        <button
+                          onClick={() => addToCart(product)}
+                          disabled={product.quantity <= 0 || !interactive}
+                          className="text-[10px] font-bold text-center py-1 rounded-md transition disabled:opacity-40"
+                          style={{ color: shopTheme.priceColor, background: 'transparent' }}>
+                          {addedId === product.id
+                            ? (lang === 'fr' ? 'Ajouté !' : 'Added!')
+                            : (lang === 'fr' ? 'Voir plus' : 'Quick view')}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -730,20 +1179,50 @@ export default function PublicProfileView({ profile, products, services, interac
                 </p>
                 <p className="text-[11px] mb-3" style={{ color: stSubtext }}>
                   {lang === 'fr'
-                    ? 'Entrez le numéro de téléphone utilisé lors du paiement.'
-                    : 'Enter the phone number used at checkout.'}
+                    ? 'Choisissez le moyen de paiement utilisé lors de la commande.'
+                    : 'Choose the payment method you used at checkout.'}
                 </p>
-                <form onSubmit={searchOrders} className="flex gap-2">
-                  <input
-                    type="tel" value={trackingPhone} onChange={e => setTrackingPhone(e.target.value)} required
-                    placeholder="+225 07 00 00 00"
-                    className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button type="button" onClick={() => setTrackingMethod('mobile')}
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition"
                     style={{
-                      background: stPageBg,
-                      border: `1px solid ${stCardBorder}`,
-                      color: stText,
-                    }}
-                  />
+                      background: trackingMethod === 'mobile' ? shopTheme.buttonGradient : 'transparent',
+                      color: trackingMethod === 'mobile' ? '#fff' : stSubtext,
+                      border: `1px solid ${trackingMethod === 'mobile' ? 'transparent' : stCardBorder}`,
+                    }}>
+                    <Smartphone size={13} />
+                    {lang === 'fr' ? 'Mobile Money' : 'Mobile Money'}
+                  </button>
+                  <button type="button" onClick={() => setTrackingMethod('card')}
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition"
+                    style={{
+                      background: trackingMethod === 'card' ? shopTheme.buttonGradient : 'transparent',
+                      color: trackingMethod === 'card' ? '#fff' : stSubtext,
+                      border: `1px solid ${trackingMethod === 'card' ? 'transparent' : stCardBorder}`,
+                    }}>
+                    <CreditCard size={13} />
+                    {lang === 'fr' ? 'Carte' : 'Card'}
+                  </button>
+                </div>
+                <form onSubmit={searchOrders} className="flex gap-2">
+                  {trackingMethod === 'mobile' ? (
+                    <input
+                      type="tel" value={trackingPhone} onChange={e => setTrackingPhone(e.target.value)} required
+                      placeholder="+225 07 00 00 00"
+                      className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none"
+                      style={{ background: stPageBg, border: `1px solid ${stCardBorder}`, color: stText }}
+                    />
+                  ) : (
+                    <input
+                      type="text" inputMode="numeric" maxLength={4}
+                      value={trackingCardLast4}
+                      onChange={e => setTrackingCardLast4(e.target.value.replace(/\D/g, ''))}
+                      required
+                      placeholder={lang === 'fr' ? '4 derniers chiffres de la carte' : 'Last 4 digits of card'}
+                      className="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none font-mono"
+                      style={{ background: stPageBg, border: `1px solid ${stCardBorder}`, color: stText }}
+                    />
+                  )}
                   <button type="submit" disabled={trackingLoading}
                     className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 disabled:opacity-50"
                     style={{ background: shopTheme.buttonGradient }}>
@@ -916,6 +1395,15 @@ export default function PublicProfileView({ profile, products, services, interac
       </div>
       )}
 
+      {/* ══ Toast ventes en direct (Feature 3) — uniquement onglet Boutique et interactive ══ */}
+      {currentTab === 'shop' && !viewingProduct && profile.user_id && (
+        <LiveSalesToast
+          sellerId={profile.user_id}
+          interactive={interactive}
+          lang={lang}
+        />
+      )}
+
       {/* Badge WhiteDuckSaaS */}
       {showBadge && (
         <div className="flex justify-center pb-6 pt-4 relative z-10">
@@ -976,6 +1464,26 @@ export default function PublicProfileView({ profile, products, services, interac
                 <span className="text-sm font-medium" style={{ color: stSubtext }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
                 <span className="text-lg font-black" style={{ color: stText }}>{cartTotal.toLocaleString()} {cart[0]?.currency}</span>
               </div>
+              {profile.whatsapp_enabled && profile.whatsapp_number && (
+                <a
+                  href={buildWhatsAppOrderUrl(
+                    profile.whatsapp_number,
+                    profile.whatsapp_greeting || '',
+                    cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, currency: i.currency })),
+                    cartTotal,
+                    cart[0]?.currency || 'FCFA',
+                    lang,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => interactive && setCartOpen(false)}
+                  className="w-full mb-2 flex items-center justify-center gap-2 text-white font-bold py-3 rounded-2xl transition"
+                  style={{ background: '#25D366' }}
+                >
+                  <MessageCircle size={16} />
+                  {lang === 'fr' ? 'Commander via WhatsApp' : 'Order via WhatsApp'}
+                </a>
+              )}
               <button onClick={handleCheckout}
                 className="w-full text-white font-bold py-3 rounded-2xl transition"
                 style={{ background: shopTheme.buttonGradient }}>

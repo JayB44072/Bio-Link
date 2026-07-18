@@ -6,7 +6,7 @@ import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
 import {
   Check, Zap, Crown, Star, Briefcase, Gift, Lock, Unlock,
-  Smartphone, ShieldCheck, X, ArrowLeft, Loader2,
+  Smartphone, ShieldCheck, X, ArrowLeft, Loader2, CreditCard,
 } from 'lucide-react';
 
 interface SubscriptionProps {
@@ -22,12 +22,13 @@ const PLAN_ACCENTS: Record<PlanType, string> = {
   free: '#9ca3af', starter: '#6C63FF', business: '#00C2FF', premium: '#FF6B9D',
 };
 
-type Operator = 'mtn' | 'orange';
-type ModalStep = 'operator' | 'phone' | 'ussd' | 'verifying' | 'success';
+type Operator = 'mtn' | 'orange' | 'card';
+type ModalStep = 'operator' | 'phone' | 'card' | 'ussd' | 'verifying' | 'success';
 
-const OPERATORS: { id: Operator; label: string; color: string; ussd: string }[] = [
-  { id: 'mtn',    label: 'MTN Money',    color: '#FFCC00', ussd: '*126#'   },
-  { id: 'orange', label: 'Orange Money', color: '#FF7900', ussd: '#150*50#' },
+const OPERATORS: { id: Operator; label: string; color: string; ussd: string; logo: string | null }[] = [
+  { id: 'mtn',    label: 'MTN Money',       color: '#FFCC00', ussd: '*126#',    logo: '/mtn.png'    },
+  { id: 'orange', label: 'Orange Money',    color: '#FF7900', ussd: '#150*50#', logo: '/orange.png' },
+  { id: 'card',   label: 'Carte bancaire',  color: '#1a73e8', ussd: '',         logo: null           },
 ];
 
 const COPY = {
@@ -75,6 +76,10 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
   const [step, setStep] = useState<ModalStep>('operator');
   const [operator, setOperator] = useState<Operator | null>(null);
   const [phone, setPhone] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardName, setCardName] = useState('');
 
   /* ── Theme tokens ── */
   const surface    = dk ? '#12122b' : '#ffffff';
@@ -109,12 +114,19 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
 
   function chooseOperator(op: Operator) {
     setOperator(op);
-    setStep('phone');
+    setStep(op === 'card' ? 'card' : 'phone');
   }
 
   function submitPhone(e: React.FormEvent) {
     e.preventDefault();
     setStep('ussd');
+  }
+
+  function submitCard(e: React.FormEvent) {
+    e.preventDefault();
+    setStep('verifying');
+    // Simulation du paiement carte
+    setTimeout(() => { confirmUssd(); }, 1800);
   }
 
   async function confirmUssd() {
@@ -124,6 +136,51 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
     if (payModalPlan) {
       await supabase.from('profiles').update({ plan_type: payModalPlan }).eq('user_id', profile.user_id);
       onPlanChange(payModalPlan);
+
+      // Affiliate commission: 10% for the referrer, capped to 12 payments
+      try {
+        const subscriptionAmount = PLAN_CONFIGS[payModalPlan].price_fcfa;
+        if (profile.referred_by && subscriptionAmount > 0) {
+          const { count } = await supabase
+            .from('affiliate_commissions')
+            .select('*', { count: 'exact', head: true })
+            .eq('referrer_id', profile.referred_by)
+            .eq('referred_id', profile.id);
+
+          if ((count ?? 0) < 12) {
+            const commissionAmount = Math.round(subscriptionAmount * 0.10 * 100) / 100;
+            const { error: insertErr } = await supabase.from('affiliate_commissions').insert({
+              referrer_id: profile.referred_by,
+              referred_id: profile.id,
+              subscription_amount: subscriptionAmount,
+              commission_amount: commissionAmount,
+              commission_rate: 0.10,
+              currency: 'FCFA',
+              plan_type: payModalPlan,
+            });
+
+            if (!insertErr) {
+              const { data: referrer } = await supabase
+                .from('profiles')
+                .select('affiliate_balance, lifetime_affiliate_earned')
+                .eq('id', profile.referred_by)
+                .maybeSingle();
+
+              if (referrer) {
+                const newBalance = Number(referrer.affiliate_balance ?? 0) + commissionAmount;
+                const newLifetime = Number(referrer.lifetime_affiliate_earned ?? 0) + commissionAmount;
+                await supabase
+                  .from('profiles')
+                  .update({
+                    affiliate_balance: newBalance,
+                    lifetime_affiliate_earned: newLifetime,
+                  })
+                  .eq('id', profile.referred_by);
+              }
+            }
+          }
+        }
+      } catch { /* Do not block success if commission fails */ }
     }
     setStep('success');
   }
@@ -306,9 +363,13 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                       <button key={op.id} onClick={() => chooseOperator(op.id)}
                         className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:-translate-y-0.5"
                         style={{ borderColor: inputBorder, background: surfaceAlt }}>
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-                          style={{ background: op.color }}>
-                          <Smartphone size={18} color={op.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                          style={{ background: op.id === 'card' ? op.color : '#fff' }}>
+                          {op.logo ? (
+                            <img src={op.logo} alt={op.label} className="w-9 h-9 object-contain" />
+                          ) : (
+                            <CreditCard size={18} color="#fff" />
+                          )}
                         </div>
                         <span className="font-bold text-sm" style={{ color: txtPrim }}>{op.label}</span>
                       </button>
@@ -321,8 +382,12 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
               {step === 'phone' && selectedOp && (
                 <form onSubmit={submitPhone}>
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: selectedOp.color }}>
-                      <Smartphone size={14} color={selectedOp.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden" style={{ background: '#fff' }}>
+                      {selectedOp.logo ? (
+                        <img src={selectedOp.logo} alt={selectedOp.label} className="w-6 h-6 object-contain" />
+                      ) : (
+                        <Smartphone size={14} color={selectedOp.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                      )}
                     </div>
                     <span className="font-bold text-sm" style={{ color: txtPrim }}>{selectedOp.label}</span>
                   </div>
@@ -342,6 +407,68 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                     className="w-full text-white font-bold py-3 rounded-2xl transition"
                     style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
                     {c.validate}
+                  </button>
+                </form>
+              )}
+
+              {/* Step 2b — card form */}
+              {step === 'card' && selectedOp && (
+                <form onSubmit={submitCard}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#1a73e8' }}>
+                      <CreditCard size={14} color="#fff" />
+                    </div>
+                    <span className="font-bold text-sm" style={{ color: txtPrim }}>{lang === 'fr' ? 'Carte bancaire' : 'Bank card'}</span>
+                  </div>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: txtPrim }}>{lang === 'fr' ? 'Nom sur la carte' : 'Name on card'}</label>
+                  <input type="text" required value={cardName} onChange={e => setCardName(e.target.value)}
+                    placeholder="JOHN DOE" autoFocus
+                    className="w-full rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-brand-violet/25"
+                    style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                  />
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: txtPrim }}>{lang === 'fr' ? 'Numéro de carte' : 'Card number'}</label>
+                  <input type="text" required inputMode="numeric" maxLength={19}
+                    value={cardNumber}
+                    onChange={e => setCardNumber(e.target.value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim())}
+                    placeholder="4242 4242 4242 4242"
+                    className="w-full rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-brand-violet/25 font-mono"
+                    style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                  />
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: txtPrim }}>MM/AA</label>
+                      <input type="text" required inputMode="numeric" maxLength={5}
+                        value={cardExpiry}
+                        onChange={e => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                          setCardExpiry(digits.length > 2 ? `${digits.slice(0,2)}/${digits.slice(2)}` : digits);
+                        }}
+                        placeholder="12/26"
+                        className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-violet/25 font-mono"
+                        style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5" style={{ color: txtPrim }}>CVV</label>
+                      <input type="password" required inputMode="numeric" maxLength={4}
+                        value={cardCvv}
+                        onChange={e => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                        placeholder="•••"
+                        className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-violet/25 font-mono"
+                        style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-xl px-3 py-2 mb-4 flex items-center gap-2" style={{ background: surfaceAlt }}>
+                    <ShieldCheck size={14} className="text-emerald-500" />
+                    <p className="text-xs font-medium" style={{ color: txtSub }}>
+                      {c.amountToPay}: <span className="font-bold" style={{ color: txtPrim }}>{planPrice.toLocaleString()} FCFA</span>
+                    </p>
+                  </div>
+                  <button type="submit"
+                    className="w-full text-white font-bold py-3 rounded-2xl transition"
+                    style={{ background: 'linear-gradient(135deg,#1a73e8,#00C2FF)' }}>
+                    {lang === 'fr' ? `Payer ${planPrice.toLocaleString()} FCFA` : `Pay ${planPrice.toLocaleString()} FCFA`}
                   </button>
                 </form>
               )}

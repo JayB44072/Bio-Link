@@ -8,8 +8,48 @@ import { LandingLang } from '../../lib/landingTranslations';
 import LocationAutocomplete, { LocationValue } from '../ui/LocationAutocomplete';
 import {
   ArrowLeft, CreditCard, Smartphone, Check, AlertCircle, ShieldCheck, Download,
-  Package, Link2, Store, Lock, RotateCcw, Truck, Sun, Moon, Globe,
+  Package, Link2, Store, Lock, RotateCcw, Truck, Sun, Moon, Globe, MessageCircle,
 } from 'lucide-react';
+
+export function buildWhatsAppOrderUrl(
+  whatsappNumber: string,
+  greeting: string,
+  items: { name: string; qty: number; price: number; currency: string }[],
+  total: number,
+  currency: string,
+  lang: 'fr' | 'en' | 'pt' | 'de',
+): string {
+  const digits = (whatsappNumber || '').replace(/\D/g, '');
+  const defaultGreetings: Record<string, string> = {
+    fr: 'Bonjour, je souhaite passer commande sur votre boutique.',
+    en: 'Hello, I would like to place an order on your shop.',
+    pt: 'Olá, gostaria de fazer uma encomenda na sua loja.',
+    de: 'Hallo, ich möchte auf Ihrem Shop bestellen.',
+  };
+  const openLine = (greeting && greeting.trim()) ? greeting.trim() : (defaultGreetings[lang] || defaultGreetings.fr);
+  const itemsHeader = lang === 'fr' ? 'Ma commande :' : lang === 'pt' ? 'Meu pedido:' : lang === 'de' ? 'Meine Bestellung:' : 'My order:';
+  const totalLabel = lang === 'fr' ? 'Total' : lang === 'pt' ? 'Total' : lang === 'de' ? 'Gesamt' : 'Total';
+  const closeLine = lang === 'fr'
+    ? 'Merci de me confirmer et me préciser l\'adresse de livraison.'
+    : lang === 'pt' ? 'Por favor confirme e indique o endereço de entrega.'
+    : lang === 'de' ? 'Bitte bestätigen Sie und geben Sie die Lieferadresse an.'
+    : 'Please confirm and let me know the delivery address.';
+  const itemLines = items.map(i => {
+    const subtotal = (i.price * i.qty).toLocaleString();
+    return `• ${i.name} x${i.qty} = ${subtotal} ${i.currency}`;
+  }).join('\n');
+  const message = [
+    openLine,
+    '',
+    itemsHeader,
+    itemLines,
+    '',
+    `${totalLabel} : ${total.toLocaleString()} ${currency}`,
+    '',
+    closeLine,
+  ].join('\n');
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
 
 export interface CartItem {
   id: string;
@@ -525,6 +565,38 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
 
             {/* ══ Moyens de paiement — passe en premier sur mobile ══ */}
             <div className="order-1 lg:order-2">
+              {seller.whatsapp_enabled && seller.whatsapp_number && (
+                <a
+                  href={buildWhatsAppOrderUrl(
+                    seller.whatsapp_number,
+                    seller.whatsapp_greeting,
+                    cartItems && cartItems.length > 0
+                      ? cartItems.map(ci => ({ name: ci.name, qty: ci.qty, price: ci.price, currency: ci.currency }))
+                      : [{ name: product.name, qty, price: unitPrice, currency: product.currency }],
+                    totalAmount,
+                    product.currency,
+                    lang,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full mb-5 flex items-center justify-center gap-2.5 text-white font-bold py-4 rounded-2xl transition-all duration-300 shadow-xl transform active:scale-99"
+                  style={{ background: '#25D366' }}
+                >
+                  <MessageCircle size={18} />
+                  <span>
+                    {lang === 'fr' ? 'Commander via WhatsApp' : 'Order via WhatsApp'}
+                  </span>
+                </a>
+              )}
+              {seller.whatsapp_enabled && seller.whatsapp_number && (
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="flex-1 h-px" style={{ background: border }} />
+                  <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: txtSub }}>
+                    {lang === 'fr' ? 'ou payer en ligne' : 'or pay online'}
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: border }} />
+                </div>
+              )}
               <form onSubmit={handlePay} className="space-y-5">
                 {error && (
                   <div className="flex items-center gap-2.5 rounded-xl p-3.5" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>

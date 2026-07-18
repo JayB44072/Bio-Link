@@ -116,6 +116,17 @@ export default function AuthScreen({ onAuth, onBack, defaultMode = 'login' }: Au
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  /* Capture ?ref=CODE on mount and persist it until signup completes */
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      if (ref) {
+        localStorage.setItem('biolinkwd_pending_referral', ref.trim().toUpperCase());
+      }
+    } catch { /* noop */ }
+  }, []);
+
   const sanitizeUsername = (v: string) => v.toLowerCase().replace(/[^a-z0-9-]/g, '');
 
   const switchMode = (m: 'login' | 'register') => {
@@ -147,9 +158,34 @@ export default function AuthScreen({ onAuth, onBack, defaultMode = 'login' }: Au
           // const password_hash = await bcrypt.hash(password, 10);
           const password_hash = password;
           //je vais revenir plutard hasher les mots de passe en remplacant password par password_hash
+
+          // Resolve pending referral code → referrer profile id
+          let referredBy: string | null = null;
+          try {
+            const pendingRef = localStorage.getItem('biolinkwd_pending_referral');
+            if (pendingRef) {
+              const { data: referrer } = await supabase
+                .from('profiles').select('id').eq('referral_code', pendingRef).maybeSingle();
+              if (referrer?.id) referredBy = referrer.id as string;
+            }
+          } catch { /* noop */ }
+
+          // Generate a unique 8-char referral code for the new user
+          const newReferralCode = (
+            Math.random().toString(36) + Date.now().toString(36)
+          ).replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase();
+
           await supabase.from('profiles').insert({
-            user_id: data.user.id, username, display_name: displayName, plan_type: 'free', password_hash,
+            user_id: data.user.id,
+            username,
+            display_name: displayName,
+            plan_type: 'free',
+            password_hash,
+            referral_code: newReferralCode,
+            referred_by: referredBy,
           });
+
+          try { localStorage.removeItem('biolinkwd_pending_referral'); } catch { /* noop */ }
         }
         onAuth();
       }
@@ -375,7 +411,7 @@ export default function AuthScreen({ onAuth, onBack, defaultMode = 'login' }: Au
                   <div>
                     <label className="block text-sm font-medium mb-1.5" style={{ color: txtPrim }}>{dashT.displayName}</label>
                     <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)}
-                      required placeholder="Ex : Marie Dupont"
+                      required placeholder="Ex : nom"
                       className={inputCls}
                       style={{ background: inputBg, borderColor: inputBorder, color: txtPrim }} />
                   </div>

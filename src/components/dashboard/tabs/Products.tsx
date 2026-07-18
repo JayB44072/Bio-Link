@@ -6,7 +6,15 @@ import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
 import LocationAutocomplete, { LocationValue } from '../../ui/LocationAutocomplete';
 import {
-  Plus, Edit2, Trash2, Lock, ShoppingBag, X, Check, Package, ArrowUp, Upload, Loader2, ArrowLeft, Star,
+  generateProductSheet,
+  fileToBase64,
+  urlToBase64,
+  getFreeAiRemaining,
+  bumpFreeAiUsage,
+  FREE_AI_QUOTA,
+} from '../../../lib/aiProductGenerator';
+import {
+  Plus, Edit2, Trash2, Lock, ShoppingBag, X, Check, Package, ArrowUp, Upload, Loader2, ArrowLeft, Star, Sparkles,
 } from 'lucide-react';
 
 interface ProductsProps {
@@ -24,11 +32,13 @@ interface ProductFormData {
   currency: string;
   is_active: boolean;
   location: LocationValue;
+  category: string;
 }
 
 const emptyForm: ProductFormData = {
   name: '', description: '', price: '', quantity: '', images: [], currency: 'FCFA', is_active: true,
   location: { address: '', lat: null, lng: null },
+  category: '',
 };
 
 const MAX_IMAGES = 8;
@@ -42,8 +52,14 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
   const [form, setForm] = useState<ProductFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiToast, setAiToast] = useState<{ kind: 'success' | 'error' | 'info'; msg: string } | null>(null);
+  const [aiHintOpen, setAiHintOpen] = useState(false);
+  const [aiHint, setAiHint] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const aiImageInputRef = useRef<HTMLInputElement>(null);
+  const pendingAiFileRef = useRef<File | null>(null);
 
   const plan = profile.plan_type;
   const planConfig = PLAN_CONFIGS[plan];
@@ -75,10 +91,21 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
       images: p.images?.length ? p.images : (p.image_url ? [p.image_url] : []),
       currency: p.currency, is_active: p.is_active,
       location: { address: p.location_address || '', lat: p.location_lat, lng: p.location_lng },
+      category: p.category || '',
     });
     setEditingId(p.id);
     setView('form');
   }
+
+  /* Autocomplete: distinct categories used across the seller's existing products */
+  const categorySuggestions = React.useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of products) {
+      const c = (p.category || '').trim();
+      if (c) seen.add(c);
+    }
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  }, [products]);
 
   function closeForm() {
     setView('list');
@@ -130,6 +157,126 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
     });
   }
 
+  /* ── AI generation ── */
+  const isFreePlan = plan === 'free';
+  const aiRemaining = getFreeAiRemaining();
+
+  function showAiToast(kind: 'success' | 'error' | 'info', msg: string, ms = 4000) {
+    setAiToast({ kind, msg });
+    window.setTimeout(() => setAiToast(null), ms);
+  }
+
+  async function runAiGeneration(imageBase64: string | null, hint: string) {
+    setAiLoading(true);
+    try {
+      const result = await generateProductSheet(imageBase64, hint, lang);
+      setForm(f => ({
+        ...f,
+        name: result.name || f.name,
+        description: result.description || f.description,
+        price: result.suggested_price_fcfa > 0 ? String(result.suggested_price_fcfa) : f.price,
+        currency: f.currency || 'FCFA',
+      }));
+
+      if (result._source === 'fallback') {
+        showAiToast(
+          'error',
+          lang === 'fr'
+            ? "L'IA n'a pas pu générer la fiche. Un texte par défaut a été inséré — modifiez-le."
+            : "AI could not generate the sheet. A default text was inserted — edit it.",
+        );
+      } else {
+        if (isFreePlan) bumpFreeAiUsage();
+        const src = result._source === 'gemini' ? 'Gemini' : 'Groq';
+        showAiToast(
+          'success',
+          lang === 'fr' ? `Fiche générée avec l'IA (${src}). Ajustez si besoin.` : `Sheet generated with AI (${src}). Adjust as needed.`,
+        );
+      }
+    } catch (e) {
+      // generateProductSheet does not throw, but keep a safety net
+      console.error('[Products] AI generation error:', e);
+      showAiToast(
+        'error',
+        lang === 'fr' ? "Erreur inattendue lors de la génération IA." : 'Unexpected AI generation error.',
+      );
+    } finally {
+      setAiLoading(false);
+      pendingAiFileRef.current = null;
+      if (aiImageInputRef.current) aiImageInputRef.current.value = '';
+    }
+  }
+
+  async function handleGenerateWithAi() {
+    if (aiLoading) return;
+
+    // Quota check (free plan only)
+    if (isFreePlan && getFreeAiRemaining() <= 0) {
+      showAiToast(
+        'error',
+        lang === 'fr'
+          ? `Quota IA atteint ce mois-ci (${FREE_AI_QUOTA} générations gratuites). Passez à un plan supérieur pour des générations illimitées.`
+          : `AI quota reached this month (${FREE_AI_QUOTA} free generations). Upgrade for unlimited generations.`,
+        6000,
+      );
+      return;
+    }
+
+    // 1) If an image is already uploaded, use it
+    if (form.images[0]) {
+      const b64 = await urlToBase64(form.images[0]);
+      if (!b64) {
+        showAiToast(
+          'error',
+          lang === 'fr' ? "Impossible de charger l'image du produit." : 'Could not load the product image.',
+        );
+        return;
+      }
+      await runAiGeneration(b64, form.name.trim());
+      return;
+    }
+
+    // 2) No image → open the hint prompt (with optional image picker)
+    setAiHint(form.name.trim());
+    setAiHintOpen(true);
+  }
+
+  async function handleAiHintSubmit() {
+    const hint = aiHint.trim();
+    const file = pendingAiFileRef.current;
+
+    if (!hint && !file) {
+      showAiToast(
+        'info',
+        lang === 'fr' ? 'Ajoutez au moins une image ou un indice texte.' : 'Add at least an image or a text hint.',
+      );
+      return;
+    }
+
+    setAiHintOpen(false);
+    let b64: string | null = null;
+    if (file) {
+      try {
+        b64 = await fileToBase64(file);
+      } catch {
+        showAiToast('error', lang === 'fr' ? "Lecture de l'image impossible." : 'Failed to read image.');
+        return;
+      }
+    }
+    await runAiGeneration(b64, hint);
+  }
+
+  function handleAiFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showAiToast('error', lang === 'fr' ? 'Fichier image invalide.' : 'Invalid image file.');
+      return;
+    }
+    pendingAiFileRef.current = file;
+    showAiToast('info', lang === 'fr' ? 'Image prête pour l\'analyse IA.' : 'Image ready for AI analysis.', 2500);
+  }
+
   async function handleSave() {
     setSaving(true);
     const payload = {
@@ -145,6 +292,7 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
       location_address: form.location.address,
       location_lat: form.location.lat,
       location_lng: form.location.lng,
+      category: form.category.trim(),
       updated_at: new Date().toISOString(),
     };
 
@@ -278,6 +426,49 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
 
           {/* ── Colonne informations ── */}
           <div className="rounded-3xl p-5 space-y-4" style={{ background: surface, border: `1px solid ${border}` }}>
+
+            {/* AI generation banner */}
+            <div className="rounded-2xl p-3 flex items-center gap-3"
+              style={{
+                background: dk ? 'rgba(139,92,246,0.10)' : 'linear-gradient(135deg,#f5f0ff,#fef0f7)',
+                border: `1px solid ${dk ? 'rgba(139,92,246,0.28)' : 'rgba(139,92,246,0.22)'}`,
+              }}>
+              <button
+                type="button"
+                onClick={handleGenerateWithAi}
+                disabled={aiLoading}
+                className="flex items-center gap-2 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-lg disabled:opacity-60 shrink-0"
+                style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)', boxShadow: '0 6px 18px rgba(139,92,246,0.35)' }}
+              >
+                {aiLoading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    {lang === 'fr' ? "L'IA analyse..." : 'AI analysing...'}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} />
+                    {lang === 'fr' ? "Générer avec l'IA" : 'Generate with AI'}
+                  </>
+                )}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold" style={{ color: dk ? '#e9d5ff' : '#6d28d9' }}>
+                  <Sparkles size={10} className="inline -mt-0.5 mr-1" />
+                  {lang === 'fr' ? 'Powered by AI' : 'Powered by AI'}
+                </p>
+                <p className="text-[10.5px] leading-tight mt-0.5" style={{ color: txtSub }}>
+                  {isFreePlan
+                    ? (lang === 'fr'
+                        ? `${aiRemaining}/${FREE_AI_QUOTA} générations gratuites restantes ce mois-ci.`
+                        : `${aiRemaining}/${FREE_AI_QUOTA} free generations left this month.`)
+                    : (lang === 'fr'
+                        ? 'Générations illimitées incluses dans votre plan.'
+                        : 'Unlimited generations included in your plan.')}
+                </p>
+              </div>
+            </div>
+
             <div>
               <label className={labelCls} style={{ color: txtLabel }}>{t.productName}</label>
               <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -312,6 +503,31 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
                 className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }} />
             </div>
 
+            <div>
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? 'Catégorie' : 'Category'}
+              </label>
+              <input
+                type="text"
+                list="product-category-suggestions"
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                placeholder={lang === 'fr' ? 'ex: Vêtements, Électronique...' : 'e.g. Clothing, Electronics...'}
+                className={inputCls}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+              <datalist id="product-category-suggestions">
+                {categorySuggestions.map(c => <option key={c} value={c} />)}
+              </datalist>
+              {categorySuggestions.length > 0 && (
+                <p className="text-[11px] mt-1.5" style={{ color: txtSub }}>
+                  {lang === 'fr'
+                    ? 'Choisissez parmi vos catégories existantes ou saisissez une nouvelle.'
+                    : 'Pick from your existing categories or enter a new one.'}
+                </p>
+              )}
+            </div>
+
             <LocationAutocomplete
               label={lang === 'fr' ? 'Emplacement du produit' : 'Product location'}
               placeholder={lang === 'fr' ? 'Ville, quartier, adresse...' : 'City, area, address...'}
@@ -344,6 +560,95 @@ export default function Products({ profile, products, onUpdate }: ProductsProps)
             </div>
           </div>
         </div>
+
+        {/* Toast for AI generation feedback */}
+        {aiToast && (
+          <div className="fixed bottom-6 right-6 z-50 max-w-sm rounded-2xl p-4 shadow-2xl flex items-start gap-3"
+            style={{
+              background: surface,
+              border: `1px solid ${
+                aiToast.kind === 'success' ? 'rgba(34,197,94,0.35)'
+                : aiToast.kind === 'error' ? 'rgba(239,68,68,0.35)'
+                : 'rgba(139,92,246,0.35)'
+              }`,
+            }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{
+              background: aiToast.kind === 'success' ? 'rgba(34,197,94,0.15)'
+                : aiToast.kind === 'error' ? 'rgba(239,68,68,0.15)'
+                : 'rgba(139,92,246,0.15)',
+              color: aiToast.kind === 'success' ? '#22c55e'
+                : aiToast.kind === 'error' ? '#ef4444'
+                : '#8B5CF6',
+            }}>
+              {aiToast.kind === 'success' ? <Check size={16} /> : aiToast.kind === 'error' ? <X size={16} /> : <Sparkles size={16} />}
+            </div>
+            <p className="text-sm leading-snug flex-1" style={{ color: txtPrim }}>{aiToast.msg}</p>
+            <button onClick={() => setAiToast(null)} style={{ color: txtSub }} className="shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* Hint prompt modal (opens when no image is attached yet) */}
+        {aiHintOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-3xl shadow-2xl p-6" style={{ background: surface }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>
+                  <Sparkles size={18} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold" style={{ color: txtPrim }}>
+                    {lang === 'fr' ? 'Décrivez votre produit' : 'Describe your product'}
+                  </h3>
+                  <p className="text-xs" style={{ color: txtSub }}>
+                    {lang === 'fr' ? "Une image OU un court indice suffit." : 'An image OR a short hint is enough.'}
+                  </p>
+                </div>
+              </div>
+
+              <input type="file" accept="image/*" ref={aiImageInputRef} onChange={handleAiFilePick} className="hidden" />
+
+              <button type="button" onClick={() => aiImageInputRef.current?.click()}
+                className="w-full rounded-xl h-16 flex items-center justify-center gap-2 mb-3 transition"
+                style={{ background: surfaceAlt, border: `2px dashed ${inputBorder}`, color: '#8B5CF6' }}>
+                <Upload size={16} />
+                <span className="text-xs font-semibold">
+                  {pendingAiFileRef.current
+                    ? (lang === 'fr' ? `Image sélectionnée : ${pendingAiFileRef.current.name}` : `Selected: ${pendingAiFileRef.current.name}`)
+                    : (lang === 'fr' ? 'Ajouter une image (optionnel)' : 'Add an image (optional)')}
+                </span>
+              </button>
+
+              <label className={labelCls} style={{ color: txtLabel }}>
+                {lang === 'fr' ? 'Indice (optionnel)' : 'Hint (optional)'}
+              </label>
+              <textarea
+                value={aiHint}
+                onChange={e => setAiHint(e.target.value)}
+                rows={3}
+                placeholder={lang === 'fr' ? 'ex: sac à main en cuir noir pour femme' : 'e.g. black leather handbag for women'}
+                className={`${inputCls} resize-none`}
+                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+              />
+
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => { setAiHintOpen(false); pendingAiFileRef.current = null; }}
+                  className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition"
+                  style={{ background: surfaceAlt, color: txtSub }}>
+                  {t.cancel}
+                </button>
+                <button onClick={handleAiHintSubmit}
+                  className="flex-1 text-white text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg,#8B5CF6,#EC4899)' }}>
+                  <Sparkles size={14} />
+                  {lang === 'fr' ? 'Générer' : 'Generate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
