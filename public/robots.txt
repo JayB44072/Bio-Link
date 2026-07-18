@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Ne pas indexer les pages internes
+Disallow: /commande/
+Disallow: /suivi
+
+Sitemap: https://biolinkwd.duckdns.org/sitemap.xml

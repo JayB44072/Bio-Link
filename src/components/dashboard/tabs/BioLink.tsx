@@ -6,14 +6,8 @@ import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
 import {
   Lock, Plus, Trash2, Check, Copy, ExternalLink, Crown, Upload, Loader2, Store, Link2, MessageCircle,
-  ShieldCheck, Truck, Award, RefreshCw, Sparkles, Zap, Megaphone,
+  ShieldCheck, Megaphone,
 } from 'lucide-react';
-
-interface TrustBadgeOption {
-  icon: string;
-  label: string;
-  Ico: React.ComponentType<{ size?: number; className?: string }>;
-}
 
 
 interface BioLinkProps {
@@ -36,7 +30,6 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
     whatsapp_enabled: profile.whatsapp_enabled ?? false,
     whatsapp_number: profile.whatsapp_number ?? '',
     whatsapp_greeting: profile.whatsapp_greeting ?? '',
-    trust_badges: (profile.trust_badges ?? []) as { icon: string; label: string }[],
     announcement_active: profile.announcement_active ?? false,
     announcement_text: profile.announcement_text ?? '',
     announcement_expires_at: profile.announcement_expires_at ?? '',
@@ -144,16 +137,6 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
     updateForm('social_links', form.social_links.filter((_, i) => i !== idx));
   }
 
-  function toggleTrustBadge(icon: string, label: string) {
-    setForm(prev => {
-      const has = prev.trust_badges.some(b => b.icon === icon);
-      const next = has
-        ? prev.trust_badges.filter(b => b.icon !== icon)
-        : [...prev.trust_badges, { icon, label }];
-      onUpdate({ trust_badges: next });
-      return { ...prev, trust_badges: next };
-    });
-  }
 
   async function handleSave() {
     setSaving(true);
