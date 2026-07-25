@@ -52,6 +52,7 @@ export interface AffiliateCommission {
   plan_type: string;
   earned_at: string;
   paid_out: boolean;
+  level?: number;
 }
 
 export interface Product {

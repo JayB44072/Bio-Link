@@ -17,8 +17,8 @@ interface AffiliateProps {
 const COPY = {
   fr: {
     title: 'Parrainage & Affiliation',
-    dealTitle: 'Gagne 10% sur chaque abonnement de tes filleuls',
-    dealSub: 'Pendant 12 mois, tu reçois 10% du montant de chaque paiement d\'abonnement effectué par les personnes que tu as parrainées. Simple, automatique, illimité.',
+    dealTitle: 'Gagne jusqu\'à 3 niveaux de commissions',
+    dealSub: 'Tu touches 5% sur chaque abonnement de tes filleuls directs, 2% sur les filleuls de tes filleuls, et 1% sur le 3ème niveau. Pendant 12 mois, crédité directement sur ton solde retirable.',
     yourLink: 'Ton lien de parrainage unique',
     copyLink: 'Copier le lien',
     copied: 'Copié !',
@@ -47,19 +47,31 @@ const COPY = {
     amountCol: 'Abonnement',
     commissionCol: 'Ta commission',
     status: 'Statut',
-    paid: 'Versé',
-    pending: 'En attente',
+    paid: 'Crédité',
+    pending: 'Crédité',
+    credited: 'Crédité au solde',
+    level: 'Niveau',
+    l1: 'Direct',
+    l2: 'Niveau 2',
+    l3: 'Niveau 3',
     shareMessage: (link: string) => `Découvre BioLinkWD, la boutique en ligne pour créateurs et vendeurs — crée ta page en 2 minutes : ${link}`,
-    referralHelper: 'Toute personne qui s\'inscrit via ce lien devient ton filleul. Dès qu\'elle passe sur un forfait payant, tu touches 10% de son abonnement pendant 12 mois.',
+    referralHelper: 'Toute personne qui s\'inscrit via ce lien devient ton filleul direct. Tu touches 5% de son abonnement, plus 2% et 1% sur ses propres filleuls.',
+    tiersTitle: 'Structure des commissions multi-niveaux',
+    tier1: '5% sur tes filleuls directs',
+    tier1Sub: 'Toute personne inscrite via ton lien',
+    tier2: '2% sur les filleuls de tes filleuls',
+    tier2Sub: 'Ton réseau qui recrute pour toi',
+    tier3: '1% sur le 3ème niveau',
+    tier3Sub: 'Croissance passive du réseau',
     howItWorks: 'Comment ça marche',
     step1: 'Partage ton lien avec ta communauté',
     step2: 'Ton filleul s\'inscrit et choisit un forfait payant',
-    step3: 'Tu reçois 10% de commission automatiquement',
+    step3: 'Commission créditée directement sur ton solde',
   },
   en: {
     title: 'Referrals & Affiliate',
-    dealTitle: 'Earn 10% on every referral\'s subscription',
-    dealSub: 'For 12 months, you get 10% of every subscription payment made by people you referred. Simple, automatic, unlimited.',
+    dealTitle: 'Earn commissions across 3 tiers',
+    dealSub: 'You get 5% on your direct referrals, 2% on their referrals, and 1% on the 3rd tier. For 12 months, credited directly to your withdrawable balance.',
     yourLink: 'Your unique referral link',
     copyLink: 'Copy link',
     copied: 'Copied!',
@@ -88,14 +100,26 @@ const COPY = {
     amountCol: 'Subscription',
     commissionCol: 'Your commission',
     status: 'Status',
-    paid: 'Paid',
-    pending: 'Pending',
+    paid: 'Credited',
+    pending: 'Credited',
+    credited: 'Credited to balance',
+    level: 'Level',
+    l1: 'Direct',
+    l2: 'Level 2',
+    l3: 'Level 3',
     shareMessage: (link: string) => `Check out BioLinkWD, the online shop for creators & sellers — build your page in 2 minutes: ${link}`,
-    referralHelper: 'Anyone who signs up through this link becomes your referral. When they subscribe to a paid plan, you earn 10% of their subscription for 12 months.',
+    referralHelper: 'Anyone who signs up through this link becomes your direct referral. You earn 5% on their subscription, plus 2% and 1% on their own referrals.',
+    tiersTitle: 'Multi-tier commission structure',
+    tier1: '5% on direct referrals',
+    tier1Sub: 'Anyone signing up through your link',
+    tier2: '2% on your referrals\' referrals',
+    tier2Sub: 'Your network recruiting for you',
+    tier3: '1% on the 3rd tier',
+    tier3Sub: 'Passive network growth',
     howItWorks: 'How it works',
     step1: 'Share your link with your community',
     step2: 'Your referral signs up and picks a paid plan',
-    step3: 'You automatically earn 10% commission',
+    step3: 'Commission credited to your balance instantly',
   },
 };
 
@@ -273,6 +297,32 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
         </div>
       </div>
 
+      {/* Multi-tier commission structure card */}
+      <div className="rounded-3xl p-5 mb-6" style={{ background: surface, border: `1px solid ${border}`, boxShadow: cardShadow }}>
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp size={16} style={{ color: '#22c55e' }} />
+          <p className="text-sm font-bold" style={{ color: txtPrim }}>{c.tiersTitle}</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { pct: '5%', title: c.tier1, sub: c.tier1Sub, color: '#22c55e', bg: 'rgba(34,197,94,0.10)' },
+            { pct: '2%', title: c.tier2, sub: c.tier2Sub, color: '#00C2FF', bg: 'rgba(0,194,255,0.10)' },
+            { pct: '1%', title: c.tier3, sub: c.tier3Sub, color: '#6C63FF', bg: 'rgba(108,99,255,0.10)' },
+          ].map((t, i) => (
+            <div key={i} className="rounded-2xl p-4 border" style={{ background: t.bg, borderColor: `${t.color}33` }}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl font-black" style={{ color: t.color }}>{t.pct}</span>
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white" style={{ background: t.color }}>
+                  {i === 0 ? 'L1' : i === 1 ? 'L2' : 'L3'}
+                </span>
+              </div>
+              <p className="text-xs font-bold mb-0.5" style={{ color: txtPrim }}>{t.title}</p>
+              <p className="text-[11px]" style={{ color: txtSub }}>{t.sub}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Referral link card */}
       <div className="rounded-3xl p-5 mb-6" style={{ background: surface, border: `1px solid ${border}`, boxShadow: cardShadow }}>
         <div className="flex items-center gap-2 mb-3">
@@ -447,9 +497,22 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
                     <TrendingUp size={15} style={{ color: '#22c55e' }} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate" style={{ color: txtPrim }}>
-                      {(comm.plan_type || 'plan').toUpperCase()}
-                    </p>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <p className="text-sm font-semibold truncate" style={{ color: txtPrim }}>
+                        {(comm.plan_type || 'plan').toUpperCase()}
+                      </p>
+                      {(() => {
+                        const lvl = comm.level ?? 1;
+                        const bg = lvl === 1 ? 'rgba(34,197,94,0.15)' : lvl === 2 ? 'rgba(0,194,255,0.15)' : 'rgba(108,99,255,0.15)';
+                        const color = lvl === 1 ? '#22c55e' : lvl === 2 ? '#00C2FF' : '#6C63FF';
+                        const label = lvl === 1 ? c.l1 : lvl === 2 ? c.l2 : c.l3;
+                        return (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider" style={{ background: bg, color }}>
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <p className="text-xs" style={{ color: txtSub }}>
                       {new Date(comm.earned_at).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                       {' · '}
@@ -462,11 +525,8 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
                     +{Number(comm.commission_amount).toLocaleString()} {comm.currency || 'FCFA'}
                   </p>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold inline-block mt-0.5"
-                    style={{
-                      background: comm.paid_out ? 'rgba(34,197,94,0.12)' : 'rgba(251,191,36,0.12)',
-                      color: comm.paid_out ? '#22c55e' : '#f59e0b',
-                    }}>
-                    {comm.paid_out ? c.paid : c.pending}
+                    style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+                    <Check size={9} className="inline mr-0.5" />{c.credited}
                   </span>
                 </div>
               </div>

@@ -4,12 +4,13 @@ import { LandingLang } from '../../lib/landingTranslations';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
 import ReviewsSection from './ReviewsSection';
 import {
-  Link2, ShoppingBag, BarChart3, Zap, Check, ArrowRight,
+  Link2, ShoppingBag, Zap, Check, ArrowRight,
   Users, ChevronRight, Menu, X, Sparkles,
   UserPlus, Palette, Rocket, CreditCard,
   Share2, BadgeCheck, LineChart, Store, Globe, Instagram,
-  MessageCircle, Star, Lock, Wallet, Bell, Shield,
-  Sun, Moon,
+  MessageCircle, Star, Wallet, Bell, Shield,
+  Sun, Moon, Sparkle, QrCode, Megaphone, Award, Eye,
+  ShieldCheck, Gift, Plus, Minus, Smartphone,
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -320,6 +321,32 @@ function getPricingPlans(t: import('../../lib/landingTranslations').LandingT) {
 }
 
 /* ─────────────────────────────────────────────
+   FAQ ITEM
+───────────────────────────────────────────── */
+function FaqItem({ q, a, dk, cardBg, cardBorder, txtPrimary, txtSub }:
+  { q: string; a: string; dk: boolean; cardBg: string; cardBorder: string; txtPrimary: string; txtSub: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border overflow-hidden transition-all"
+      style={{ background: cardBg, borderColor: cardBorder }}>
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left">
+        <span className="font-bold text-sm sm:text-base" style={{ color: txtPrimary }}>{q}</span>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff' }}>
+          {open ? <Minus size={14} className="text-brand-violet" /> : <Plus size={14} className="text-brand-violet" />}
+        </div>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 -mt-1">
+          <p className={`text-sm leading-relaxed ${txtSub}`}>{a}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    MAIN COMPONENT
 ───────────────────────────────────────────── */
 interface LandingPageProps { onLogin: () => void; onRegister: () => void; }
@@ -611,9 +638,9 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <AnimSection direction="up" delay={400}>
               <div className="flex flex-wrap gap-5">
                 {[
-                  { icon: BadgeCheck, text: t.heroBadge1, color: 'text-emerald-500' },
+                  { icon: Sparkle,    text: t.heroBadge1, color: 'text-brand-violet' },
                   { icon: Zap,        text: t.heroBadge2, color: 'text-amber-500'   },
-                  { icon: CreditCard, text: t.heroBadge3, color: 'text-brand-violet' },
+                  { icon: CreditCard, text: t.heroBadge3, color: 'text-emerald-500' },
                 ].map(({ icon: Icon, text, color }) => (
                   <div key={text} className="flex items-center gap-2">
                     <Icon size={16} className={color} />
@@ -644,6 +671,48 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         </div>
       </section>
 
+      {/* ══ PAYMENTS STRIP ══ */}
+      <section className="py-12 px-5 border-b" style={{ background: dk ? '#0b0b1e' : '#fafaff', borderColor: cardBorder }}>
+        <div className="max-w-5xl mx-auto">
+          <AnimSection direction="up">
+            <p className={`text-center text-xs font-bold uppercase tracking-widest mb-6 ${txtSub}`}>{t.payStripTitle}</p>
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+              {/* MTN */}
+              <div className="flex items-center gap-3 rounded-2xl px-5 py-3 border shadow-sm"
+                style={{ background: cardBg, borderColor: cardBorder }}>
+                <img src="/mtn.png" alt="MTN" className="h-8 w-auto object-contain"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                <span className="text-sm font-bold" style={{ color: txtPrimary }}>{t.payMtn}</span>
+              </div>
+              {/* Orange */}
+              <div className="flex items-center gap-3 rounded-2xl px-5 py-3 border shadow-sm"
+                style={{ background: cardBg, borderColor: cardBorder }}>
+                <img src="/orange.png" alt="Orange" className="h-8 w-auto object-contain"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
+                <span className="text-sm font-bold" style={{ color: txtPrimary }}>{t.payOrange}</span>
+              </div>
+              {/* Card */}
+              <div className="flex items-center gap-3 rounded-2xl px-5 py-3 border shadow-sm"
+                style={{ background: cardBg, borderColor: cardBorder }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                  <CreditCard size={16} className="text-white" />
+                </div>
+                <span className="text-sm font-bold" style={{ color: txtPrimary }}>{t.payCard}</span>
+              </div>
+              {/* WhatsApp */}
+              <div className="flex items-center gap-3 rounded-2xl px-5 py-3 border shadow-sm"
+                style={{ background: '#25D366', borderColor: '#25D366' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/25">
+                  <MessageCircle size={16} className="text-white" />
+                </div>
+                <span className="text-sm font-bold text-white">{t.payWa}</span>
+              </div>
+            </div>
+          </AnimSection>
+        </div>
+      </section>
+
       {/* ══ FEATURES ══ */}
       <section id="features" className="py-24 px-5 relative overflow-hidden" style={{ background: bgFeat }}>
         <BgShapes variant="light" />
@@ -660,43 +729,67 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <p className={`max-w-xl mx-auto ${txtSub}`}>{t.featuresSub}</p>
           </AnimSection>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid sm:grid-cols-2 gap-6">
             {[
               {
-                illus: <FeatIllus1 />, bg: dk ? '#1a1535' : '#F0EEFF', accent: '#6C63FF', tag: t.feat1Tag,
-                icon: Link2, title: t.feat1Title, desc: t.feat1Desc,
-                perks: [t.feat1p1, t.feat1p2, t.feat1p3],
+                accent: '#25D366', bg: dk ? '#0d2318' : '#ecfdf5', tag: t.catSellTag,
+                icon: Wallet, title: t.catSellTitle, desc: t.catSellDesc,
+                perks: [
+                  { Icon: Smartphone, text: t.catSell1 },
+                  { Icon: CreditCard, text: t.catSell2 },
+                  { Icon: MessageCircle, text: t.catSell3 },
+                  { Icon: BadgeCheck, text: t.catSell4 },
+                ],
               },
               {
-                illus: <FeatIllus2 />, bg: dk ? '#0f1e2e' : '#E8F7FF', accent: '#00C2FF', tag: t.feat2Tag,
-                icon: Store, title: t.feat2Title, desc: t.feat2Desc,
-                perks: [t.feat2p1, t.feat2p2, t.feat2p3],
+                accent: '#6C63FF', bg: dk ? '#1a1535' : '#F0EEFF', tag: t.catBoostTag,
+                icon: Sparkle, title: t.catBoostTitle, desc: t.catBoostDesc,
+                perks: [
+                  { Icon: Sparkle, text: t.catBoost1 },
+                  { Icon: Palette, text: t.catBoost2 },
+                  { Icon: QrCode, text: t.catBoost3 },
+                  { Icon: Megaphone, text: t.catBoost4 },
+                ],
               },
               {
-                illus: <FeatIllus3 />, bg: dk ? '#201520' : '#FFF0F6', accent: '#FF6B9D', tag: t.feat3Tag,
-                icon: LineChart, title: t.feat3Title, desc: t.feat3Desc,
-                perks: [t.feat3p1, t.feat3p2, t.feat3p3],
+                accent: '#FF6B9D', bg: dk ? '#201520' : '#FFF0F6', tag: t.catTrustTag,
+                icon: ShieldCheck, title: t.catTrustTitle, desc: t.catTrustDesc,
+                perks: [
+                  { Icon: Award, text: t.catTrust1 },
+                  { Icon: Star, text: t.catTrust2 },
+                  { Icon: ShieldCheck, text: t.catTrust3 },
+                  { Icon: Bell, text: t.catTrust4 },
+                ],
               },
-            ].map(({ illus, bg, accent, tag, icon: Icon, title, desc, perks }, i) => (
+              {
+                accent: '#00C2FF', bg: dk ? '#0f1e2e' : '#E8F7FF', tag: t.catGrowTag,
+                icon: LineChart, title: t.catGrowTitle, desc: t.catGrowDesc,
+                perks: [
+                  { Icon: Gift, text: t.catGrow1 },
+                  { Icon: Eye, text: t.catGrow2 },
+                  { Icon: Store, text: t.catGrow3 },
+                  { Icon: Globe, text: t.catGrow4 },
+                ],
+              },
+            ].map(({ accent, bg, tag, icon: Icon, title, desc, perks }, i) => (
               <AnimSection key={title} direction="up" delay={i * 120}>
-                <div className="rounded-3xl p-8 shadow-sm border hover:shadow-xl hover:shadow-purple-100/30 transition-all duration-300 hover:-translate-y-1.5 group h-full flex flex-col"
+                <div className="rounded-3xl p-8 shadow-sm border hover:shadow-xl hover:shadow-purple-100/30 transition-all duration-300 hover:-translate-y-1.5 h-full flex flex-col"
                   style={{ background: cardBg, borderColor: cardBorder }}>
-                  <div className="rounded-2xl p-4 mb-6 transition-transform duration-300 group-hover:scale-[1.03]" style={{ background: bg }}>
-                    {illus}
-                  </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: bg }}>
-                      <Icon size={14} style={{ color: accent }} />
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: bg }}>
+                      <Icon size={22} style={{ color: accent }} />
                     </div>
-                    <span className="text-xs font-bold" style={{ color: accent }}>{tag}</span>
+                    <span className="text-xs font-bold uppercase tracking-wide" style={{ color: accent }}>{tag}</span>
                   </div>
-                  <h3 className="text-xl font-black mb-2" style={{ color: txtPrimary }}>{title}</h3>
-                  <p className={`text-sm leading-relaxed mb-5 ${txtSub}`}>{desc}</p>
-                  <ul className="space-y-2 mt-auto">
-                    {perks.map(p => (
-                      <li key={p} className="flex items-center gap-2">
-                        <Check size={13} style={{ color: accent }} className="shrink-0" />
-                        <span className={`text-xs font-medium ${txtSub}`}>{p}</span>
+                  <h3 className="text-2xl font-black mb-2" style={{ color: txtPrimary }}>{title}</h3>
+                  <p className={`text-sm leading-relaxed mb-6 ${txtSub}`}>{desc}</p>
+                  <ul className="space-y-3 mt-auto">
+                    {perks.map(({ Icon: PIcon, text }) => (
+                      <li key={text} className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: bg }}>
+                          <PIcon size={13} style={{ color: accent }} />
+                        </div>
+                        <span className={`text-sm font-medium leading-tight pt-1 ${txtSub}`}>{text}</span>
                       </li>
                     ))}
                   </ul>
@@ -744,6 +837,65 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               </AnimSection>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ══ REFERRAL MULTI-LEVEL ══ */}
+      <section id="referral" className="py-24 px-5 relative overflow-hidden" style={{ background: bgFeat }}>
+        <BgShapes variant="light" />
+        <div className="max-w-6xl mx-auto relative z-10">
+          <AnimSection direction="up" className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-4 border"
+              style={{ background: dk ? 'rgba(108,99,255,0.12)' : '#fff', borderColor: dk ? 'rgba(108,99,255,0.25)' : '#ede9fe' }}>
+              <Gift size={12} className="text-brand-violet" />
+              <span className="text-xs font-semibold text-brand-violet uppercase tracking-wide">{t.refTag}</span>
+            </div>
+            <h2 className="text-4xl font-black mb-4" style={{ color: txtPrimary }}>{t.refTitle}</h2>
+            <p className={`max-w-2xl mx-auto ${txtSub}`}>{t.refDesc}</p>
+          </AnimSection>
+
+          <AnimSection direction="up" delay={100}>
+            <div className="rounded-3xl p-8 sm:p-10 border shadow-lg"
+              style={{ background: cardBg, borderColor: cardBorder }}>
+              <div className="grid md:grid-cols-3 gap-6 mb-8">
+                {[
+                  { pct: '5%', label: t.refL1, color: '#22c55e', bg: dk ? '#0d2318' : '#ecfdf5', tier: 'L1' },
+                  { pct: '2%', label: t.refL2, color: '#00C2FF', bg: dk ? '#0f1e2e' : '#E8F7FF', tier: 'L2' },
+                  { pct: '1%', label: t.refL3, color: '#6C63FF', bg: dk ? '#1a1535' : '#F0EEFF', tier: 'L3' },
+                ].map(({ pct, label, color, bg, tier }, i) => (
+                  <div key={tier} className="relative rounded-2xl p-6 text-center border-2 transition-transform hover:-translate-y-1"
+                    style={{ background: bg, borderColor: color + '40' }}>
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-black px-3 py-1 rounded-full text-white shadow"
+                      style={{ background: color }}>{tier}</div>
+                    <div className="text-5xl font-black mb-2" style={{ color }}>{pct}</div>
+                    <div className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : '#1a1a2e' }}>{label}</div>
+                    {i < 2 && (
+                      <ArrowRight size={20} className="hidden md:block absolute top-1/2 -right-4 -translate-y-1/2 z-10"
+                        style={{ color: dk ? '#4b5563' : '#cbd5e1' }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <ul className="grid sm:grid-cols-2 gap-3 mb-8">
+                {[t.refP1, t.refP2, t.refP3, t.refP4].map(text => (
+                  <li key={text} className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                      style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff' }}>
+                      <Check size={13} className="text-brand-violet" />
+                    </div>
+                    <span className={`text-sm font-medium leading-snug ${txtSub}`}>{text}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="text-center">
+                <button onClick={onRegister}
+                  className="inline-flex items-center gap-2 text-white font-bold px-7 py-3.5 rounded-2xl shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
+                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                  {t.refCta}<ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+          </AnimSection>
         </div>
       </section>
 
@@ -804,11 +956,46 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               </AnimSection>
             ))}
           </div>
+
+          <AnimSection direction="up" delay={200}>
+            <div className="mt-10 rounded-2xl px-6 py-4 flex items-center justify-center gap-3 border text-center"
+              style={{ background: dk ? 'rgba(108,99,255,0.1)' : '#f5f3ff', borderColor: dk ? 'rgba(108,99,255,0.25)' : '#ddd6fe' }}>
+              <QrCode size={18} className="text-brand-violet shrink-0" />
+              <span className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : '#1a1a2e' }}>{t.premiumQrCallout}</span>
+            </div>
+          </AnimSection>
         </div>
       </section>
 
       {/* ══ REVIEWS ══ */}
       <ReviewsSection t={t} dk={dk} />
+
+      {/* ══ FAQ ══ */}
+      <section id="faq" className="py-24 px-5 relative overflow-hidden" style={{ background: bgFeat }}>
+        <BgShapes variant="light" />
+        <div className="max-w-3xl mx-auto relative z-10">
+          <AnimSection direction="up" className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-4 border"
+              style={{ background: dk ? 'rgba(0,194,255,0.1)' : '#eff6ff', borderColor: dk ? 'rgba(0,194,255,0.2)' : '#dbeafe' }}>
+              <MessageCircle size={12} className="text-brand-cyan" />
+              <span className="text-xs font-semibold text-brand-cyan uppercase tracking-wide">{t.faqTag}</span>
+            </div>
+            <h2 className="text-4xl font-black mb-4" style={{ color: txtPrimary }}>{t.faqTitle}</h2>
+          </AnimSection>
+          <div className="space-y-3">
+            {[
+              { q: t.faq1Q, a: t.faq1A },
+              { q: t.faq2Q, a: t.faq2A },
+              { q: t.faq3Q, a: t.faq3A },
+              { q: t.faq4Q, a: t.faq4A },
+            ].map((item, i) => (
+              <AnimSection key={i} direction="up" delay={i * 80}>
+                <FaqItem q={item.q} a={item.a} dk={dk} cardBg={cardBg} cardBorder={cardBorder} txtPrimary={txtPrimary} txtSub={txtSub} />
+              </AnimSection>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ══ CTA FINAL ══ */}
       <section className="py-24 px-5" style={{ background: bg0 }}>

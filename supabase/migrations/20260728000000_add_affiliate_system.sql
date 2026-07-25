@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS affiliate_commissions (
   referred_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   subscription_amount numeric(12,2) NOT NULL,
   commission_amount numeric(12,2) NOT NULL,
-  commission_rate numeric(4,3) NOT NULL DEFAULT 0.10,
+  commission_rate numeric(4,3) NOT NULL DEFAULT 0.05,
   currency text DEFAULT 'FCFA',
   plan_type text,
   earned_at timestamptz DEFAULT now(),

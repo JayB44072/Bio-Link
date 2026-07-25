@@ -137,47 +137,68 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
       await supabase.from('profiles').update({ plan_type: payModalPlan }).eq('user_id', profile.user_id);
       onPlanChange(payModalPlan);
 
-      // Affiliate commission: 10% for the referrer, capped to 12 payments
+      // Multi-level affiliate commissions:
+      // Level 1 (direct referrer)          = 5%
+      // Level 2 (referrer of referrer)     = 2%
+      // Level 3 (grandparent of referrer)  = 1%
+      // Each level capped at 12 payments per (referrer, referred) pair.
       try {
         const subscriptionAmount = PLAN_CONFIGS[payModalPlan].price_fcfa;
-        if (profile.referred_by && subscriptionAmount > 0) {
-          const { count } = await supabase
-            .from('affiliate_commissions')
-            .select('*', { count: 'exact', head: true })
-            .eq('referrer_id', profile.referred_by)
-            .eq('referred_id', profile.id);
+        if (subscriptionAmount > 0) {
+          const RATES = [0.05, 0.02, 0.01];
+          let currentReferredId = profile.id;
+          let currentReferrerId = profile.referred_by ?? null;
 
-          if ((count ?? 0) < 12) {
-            const commissionAmount = Math.round(subscriptionAmount * 0.10 * 100) / 100;
-            const { error: insertErr } = await supabase.from('affiliate_commissions').insert({
-              referrer_id: profile.referred_by,
-              referred_id: profile.id,
-              subscription_amount: subscriptionAmount,
-              commission_amount: commissionAmount,
-              commission_rate: 0.10,
-              currency: 'FCFA',
-              plan_type: payModalPlan,
-            });
+          for (let level = 1; level <= 3 && currentReferrerId; level++) {
+            const rate = RATES[level - 1];
+            const commissionAmount = Math.round(subscriptionAmount * rate * 100) / 100;
 
-            if (!insertErr) {
-              const { data: referrer } = await supabase
-                .from('profiles')
-                .select('affiliate_balance, lifetime_affiliate_earned')
-                .eq('id', profile.referred_by)
-                .maybeSingle();
+            const { count } = await supabase
+              .from('affiliate_commissions')
+              .select('*', { count: 'exact', head: true })
+              .eq('referrer_id', currentReferrerId)
+              .eq('referred_id', currentReferredId);
 
-              if (referrer) {
-                const newBalance = Number(referrer.affiliate_balance ?? 0) + commissionAmount;
-                const newLifetime = Number(referrer.lifetime_affiliate_earned ?? 0) + commissionAmount;
-                await supabase
+            if ((count ?? 0) < 12) {
+              const { error: insertErr } = await supabase.from('affiliate_commissions').insert({
+                referrer_id: currentReferrerId,
+                referred_id: currentReferredId,
+                subscription_amount: subscriptionAmount,
+                commission_amount: commissionAmount,
+                commission_rate: rate,
+                currency: 'FCFA',
+                plan_type: payModalPlan,
+                level,
+                paid_out: true,  // Credited to withdrawable balance immediately
+                paid_out_at: new Date().toISOString(),
+              });
+
+              if (!insertErr) {
+                const { data: referrer } = await supabase
                   .from('profiles')
-                  .update({
-                    affiliate_balance: newBalance,
-                    lifetime_affiliate_earned: newLifetime,
-                  })
-                  .eq('id', profile.referred_by);
+                  .select('affiliate_balance, lifetime_affiliate_earned, referred_by')
+                  .eq('id', currentReferrerId)
+                  .maybeSingle();
+
+                if (referrer) {
+                  const newBalance = Number(referrer.affiliate_balance ?? 0) + commissionAmount;
+                  const newLifetime = Number(referrer.lifetime_affiliate_earned ?? 0) + commissionAmount;
+                  await supabase
+                    .from('profiles')
+                    .update({
+                      affiliate_balance: newBalance,
+                      lifetime_affiliate_earned: newLifetime,
+                    })
+                    .eq('id', currentReferrerId);
+
+                  // Walk up the chain for the next level
+                  currentReferredId = currentReferrerId;
+                  currentReferrerId = referrer.referred_by ?? null;
+                  continue;
+                }
               }
             }
+            break;
           }
         }
       } catch { /* Do not block success if commission fails */ }
