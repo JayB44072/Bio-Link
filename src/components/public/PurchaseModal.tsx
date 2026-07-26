@@ -19,7 +19,12 @@ export function buildWhatsAppOrderUrl(
   currency: string,
   lang: 'fr' | 'en' | 'pt' | 'de',
 ): string {
-  const digits = (whatsappNumber || '').replace(/\D/g, '');
+  // Normalize: strip everything except digits. Drop a leading "00" (international dial prefix).
+  // If the number starts with 0 and is < 10 digits (local format missing country code),
+  // WhatsApp will reject it — but we render it anyway; the vendor is responsible for
+  // entering a full international number (validated on the dashboard).
+  let digits = (whatsappNumber || '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
   const defaultGreetings: Record<string, string> = {
     fr: 'Bonjour, je souhaite passer commande sur votre boutique.',
     en: 'Hello, I would like to place an order on your shop.',
@@ -565,7 +570,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
 
             {/* ══ Moyens de paiement — passe en premier sur mobile ══ */}
             <div className="order-1 lg:order-2">
-              {seller.whatsapp_enabled && seller.whatsapp_number && (
+              {seller.whatsapp_enabled && seller.whatsapp_number && seller.plan_type === 'premium' && (
                 <a
                   href={buildWhatsAppOrderUrl(
                     seller.whatsapp_number,
@@ -588,7 +593,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                   </span>
                 </a>
               )}
-              {seller.whatsapp_enabled && seller.whatsapp_number && (
+              {seller.whatsapp_enabled && seller.whatsapp_number && seller.plan_type === 'premium' && (
                 <div className="flex items-center gap-3 mb-5">
                   <div className="flex-1 h-px" style={{ background: border }} />
                   <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: txtSub }}>

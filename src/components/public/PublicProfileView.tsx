@@ -1464,7 +1464,7 @@ export default function PublicProfileView({ profile, products, services, interac
                 <span className="text-sm font-medium" style={{ color: stSubtext }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
                 <span className="text-lg font-black" style={{ color: stText }}>{cartTotal.toLocaleString()} {cart[0]?.currency}</span>
               </div>
-              {profile.whatsapp_enabled && profile.whatsapp_number && (
+              {profile.whatsapp_enabled && profile.whatsapp_number && profile.plan_type === 'premium' && (
                 <a
                   href={buildWhatsAppOrderUrl(
                     profile.whatsapp_number,

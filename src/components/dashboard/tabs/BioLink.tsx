@@ -430,8 +430,15 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
           )}
         </div>
 
-        {/* ══ Carte Commande via WhatsApp ══ */}
-        <div className="rounded-3xl p-5" style={{ background: surface, border: `1px solid ${border}` }}>
+        {/* ══ Carte Commande via WhatsApp — Premium uniquement ══ */}
+        <div className="rounded-3xl p-5 relative" style={{ background: surface, border: `1px solid ${border}` }}>
+          {profile.plan_type !== 'premium' && (
+            <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-full shadow-sm"
+              style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}>
+              <Crown size={10} className="text-white" />
+              <span className="text-[9px] font-black text-white uppercase tracking-wider">Premium</span>
+            </div>
+          )}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(37,211,102,0.15)' }}>
@@ -442,9 +449,13 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
                   {lang === 'fr' ? 'Commande via WhatsApp' : 'Order via WhatsApp'}
                 </h2>
                 <p className="text-[11px] mt-0.5" style={{ color: txtSub }}>
-                  {lang === 'fr'
-                    ? 'Recevez les commandes directement sur WhatsApp — booste vos conversions !'
-                    : 'Receive orders directly on WhatsApp — boost your conversions!'}
+                  {profile.plan_type !== 'premium'
+                    ? (lang === 'fr'
+                      ? 'Fonctionnalité réservée au forfait Premium — passez au Premium pour l\'activer.'
+                      : 'Premium-only feature — upgrade to Premium to enable it.')
+                    : (lang === 'fr'
+                      ? 'Recevez les commandes directement sur WhatsApp — booste vos conversions !'
+                      : 'Receive orders directly on WhatsApp — boost your conversions!')}
                 </p>
               </div>
             </div>
@@ -452,18 +463,25 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
               type="button"
               role="switch"
               aria-checked={form.whatsapp_enabled}
-              onClick={() => updateForm('whatsapp_enabled', !form.whatsapp_enabled)}
-              className="relative shrink-0 w-11 h-6 rounded-full transition-colors"
-              style={{ background: form.whatsapp_enabled ? '#25D366' : (dk ? 'rgba(255,255,255,0.14)' : '#e5e7eb') }}
+              disabled={profile.plan_type !== 'premium'}
+              onClick={() => {
+                if (profile.plan_type !== 'premium') {
+                  onGoToSubscription?.();
+                  return;
+                }
+                updateForm('whatsapp_enabled', !form.whatsapp_enabled);
+              }}
+              className="relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: form.whatsapp_enabled && profile.plan_type === 'premium' ? '#25D366' : (dk ? 'rgba(255,255,255,0.14)' : '#e5e7eb') }}
             >
               <span
                 className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
-                style={{ left: form.whatsapp_enabled ? '22px' : '2px' }}
+                style={{ left: form.whatsapp_enabled && profile.plan_type === 'premium' ? '22px' : '2px' }}
               />
             </button>
           </div>
 
-          <div className={form.whatsapp_enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
+          <div className={form.whatsapp_enabled && profile.plan_type === 'premium' ? 'opacity-100' : 'opacity-50 pointer-events-none'}>
             <div className="mb-4">
               <label className={labelCls} style={{ color: txtLabel }}>
                 {lang === 'fr' ? 'Numéro WhatsApp (format international)' : 'WhatsApp number (international format)'}
