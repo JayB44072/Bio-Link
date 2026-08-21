@@ -44,7 +44,8 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
 
   const plan = PLAN_CONFIGS[profile.plan_type];
   const canUseLogo = plan.shop_logo;
-  const canPublish = profile.plan_type !== 'free';
+  // Publier / partager / consulter sa boutique publique reste GRATUIT pour tous les plans.
+  const canPublish = true;
   const maxSocial = plan.max_social_links;
   const atSocialLimit = maxSocial !== null && form.social_links.length >= maxSocial;
   const publicUrl = `${window.location.origin}/u/${profile.username}`;
@@ -160,20 +161,13 @@ export default function BioLink({ profile, onUpdate, onGoToSubscription }: BioLi
   }
 
   function handleCopy() {
-    if (!canPublish) {
-      setPaywallOpen(true);
-      return;
-    }
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleVisitPublic(e: React.MouseEvent<HTMLAnchorElement>) {
-    if (!canPublish) {
-      e.preventDefault();
-      setPaywallOpen(true);
-    }
+  function handleVisitPublic(_e: React.MouseEvent<HTMLAnchorElement>) {
+    // Toujours ouvert — le partage de la boutique est gratuit sur tous les plans.
   }
 
   return (
