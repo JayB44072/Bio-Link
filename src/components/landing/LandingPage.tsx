@@ -1,22 +1,54 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useScrollAnimation } from '../../hooks/useScrollAnimation';
-import { LandingLang } from '../../lib/landingTranslations';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
 import ReviewsSection from './ReviewsSection';
+import AnimSection from './AnimSection';
+import BeforeAfterSection from './BeforeAfterSection';
+import { fetchPublicStats, type PublicStats } from '../../lib/publicStats';
+
+const PhoneShowcase = lazy(() => import('./PhoneShowcase'));
+
+/** Boutique de démonstration ouverte par « Voir une boutique en vrai » (variable VITE_DEMO_SHOP_USERNAME). */
+const DEMO_SHOP = ((import.meta.env.VITE_DEMO_SHOP_USERNAME as string | undefined) ?? '').trim().replace(/[^a-zA-Z0-9-_.]/g, '');
+
+interface NetworkInformation { saveData?: boolean; effectiveType?: string }
+/** Connexion lente ou mode économie de données : on n'embarque pas l'animation 3D. */
+const isLowBandwidth = () => {
+  const c = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+  return !!c && (c.saveData === true || c.effectiveType === '2g' || c.effectiveType === 'slow-2g');
+};
+
+/** Téléphone statique affiché pendant le chargement de l'animation (même encombrement, pas de décalage). */
+function PhonePlaceholder() {
+  return (
+    <div data-ui className="relative mx-auto w-[285px] sm:w-[300px] shrink-0" aria-hidden>
+      <div className="rounded-[2.6rem] bg-[#15142B] p-2.5">
+        <div className="grid h-[560px] place-items-center rounded-[2.1rem]"
+          style={{ background: 'radial-gradient(120% 80% at 50% 45%,#2a2a38 0%,#15151d 60%,#0b0b11 100%)' }}>
+          <ShoppingBag size={56} className="text-white/20" />
+        </div>
+      </div>
+    </div>
+  );
+}
+import LanguageMenu from '../ui/LanguageMenu';
+import ThemeToggle from '../ui/ThemeToggle';
+import { BRAND, GRADIENTS } from '../../lib/theme';
 import {
   Link2, ShoppingBag, Zap, Check, ArrowRight,
   Users, ChevronRight, Menu, X, Sparkles,
   UserPlus, Palette, Rocket, CreditCard,
   Share2, BadgeCheck, LineChart, Store, Globe, Instagram,
   MessageCircle, Star, Wallet, Bell, Shield,
-  Sun, Moon, Sparkle, QrCode, Megaphone, Award, Eye,
-  ShieldCheck, Gift, Plus, Minus, Smartphone,
+  Sparkle, QrCode, Megaphone, Award, Eye,
+  ShieldCheck, Gift, Plus, Minus, Smartphone, ExternalLink,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
    COUNT-UP HOOK
 ───────────────────────────────────────────── */
-function useCountUp(target: number, duration = 1800, suffix = '') {
+function useCountUp(target: number, duration = 1800, suffix = '', decimals = 0) {
   const [count, setCount] = useState(0);
   const [started, setStarted] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -39,162 +71,17 @@ function useCountUp(target: number, duration = 1800, suffix = '') {
     const timer = setInterval(() => {
       start += step;
       if (start >= target) { setCount(target); clearInterval(timer); }
-      else setCount(Math.floor(start));
+      else setCount(decimals ? Number(start.toFixed(decimals)) : Math.floor(start));
     }, 16);
     return () => clearInterval(timer);
-  }, [started, target, duration]);
+  }, [started, target, duration, decimals]);
 
-  return { ref, display: started ? count.toLocaleString('fr-FR') + suffix : '0' + suffix };
+  return { ref, display: (started ? count : 0).toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix };
 }
 
 /* ─────────────────────────────────────────────
    ILLUSTRATIONS SVG
 ───────────────────────────────────────────── */
-function HeroIllustration() {
-  return (
-    <svg viewBox="0 0 520 500" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full max-w-lg drop-shadow-xl">
-      <ellipse cx="268" cy="270" rx="170" ry="155" fill="url(#heroBlob)" opacity="0.18" />
-      <ellipse cx="260" cy="445" rx="90" ry="12" fill="#6C63FF" opacity="0.08" />
-      <rect x="155" y="35" width="210" height="400" rx="32" fill="#0f0f23" />
-      <rect x="163" y="47" width="194" height="376" rx="22" fill="#F8F9FF" />
-      <rect x="220" y="42" width="80" height="14" rx="7" fill="#0f0f23" />
-      <circle cx="224" cy="49" r="3" fill="#6C63FF" opacity="0.6" />
-      <circle cx="260" cy="118" r="34" fill="url(#avatarGrad)" />
-      <circle cx="260" cy="105" r="13" fill="#fff" opacity="0.95" />
-      <ellipse cx="260" cy="130" rx="19" ry="11" fill="#fff" opacity="0.95" />
-      <circle cx="285" cy="142" r="10" fill="#6C63FF" />
-      <path d="M280 142 L283 145 L290 138" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="215" y="160" width="90" height="11" rx="5.5" fill="#1a1a2e" opacity="0.85" />
-      <rect x="228" y="177" width="64" height="8" rx="4" fill="#6C63FF" opacity="0.5" />
-      <rect x="200" y="194" width="120" height="5" rx="2.5" fill="#94a3b8" opacity="0.55" />
-      <rect x="210" y="204" width="100" height="5" rx="2.5" fill="#94a3b8" opacity="0.35" />
-      {[
-        { y: 222, grad: 'url(#instaBg)' },
-        { y: 256, grad: 'url(#waBg)' },
-        { y: 290, grad: 'url(#ttBg)' },
-      ].map(({ y, grad }, i) => (
-        <g key={i}>
-          <rect x="183" y={y} width="154" height="28" rx="14" fill={grad} />
-          <circle cx="203" cy={y + 14} r="10" fill="rgba(255,255,255,0.2)" />
-          <rect x="217" y={y + 9} width="70" height="10" rx="5" fill="white" opacity="0.88" />
-        </g>
-      ))}
-      <rect x="183" y="332" width="70" height="72" rx="12" fill="white" />
-      <rect x="183" y="332" width="70" height="42" rx="12" fill="#E8F7FF" />
-      <rect x="189" y="380" width="44" height="7" rx="3.5" fill="#1a1a2e" opacity="0.7" />
-      <rect x="189" y="392" width="32" height="6" rx="3" fill="#6C63FF" opacity="0.8" />
-      <rect x="263" y="332" width="70" height="72" rx="12" fill="white" />
-      <rect x="263" y="332" width="70" height="42" rx="12" fill="#F0EEFF" />
-      <rect x="269" y="380" width="44" height="7" rx="3.5" fill="#1a1a2e" opacity="0.7" />
-      <rect x="269" y="392" width="32" height="6" rx="3" fill="#6C63FF" opacity="0.8" />
-      <g filter="url(#floatShadow)" className="animate-float">
-        <rect x="14" y="100" width="132" height="52" rx="16" fill="white" />
-        <rect x="26" y="114" width="24" height="24" rx="8" fill="#dcfce7" />
-        <path d="M38 122 L34 126 L30 122" stroke="#16a34a" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-        <rect x="58" y="116" width="72" height="8" rx="4" fill="#1a1a2e" opacity="0.75" />
-        <rect x="58" y="129" width="52" height="7" rx="3.5" fill="#22c55e" opacity="0.65" />
-      </g>
-      <g filter="url(#floatShadow)" style={{ animationDelay: '1.2s' }} className="animate-float-slow">
-        <rect x="362" y="180" width="138" height="52" rx="16" fill="white" />
-        <rect x="374" y="194" width="24" height="24" rx="8" fill="#ede9fe" />
-        <circle cx="386" cy="206" r="5" fill="#7c3aed" opacity="0.7" />
-        <circle cx="386" cy="206" r="2" fill="#7c3aed" />
-        <rect x="406" y="196" width="76" height="8" rx="4" fill="#1a1a2e" opacity="0.75" />
-        <rect x="406" y="209" width="56" height="7" rx="3.5" fill="#6C63FF" opacity="0.65" />
-      </g>
-      <g filter="url(#floatShadow)" style={{ animationDelay: '2.4s' }} className="animate-float">
-        <rect x="350" y="320" width="138" height="52" rx="16" fill="white" />
-        <rect x="362" y="334" width="24" height="24" rx="8" fill="#fef9c3" />
-        <path d="M374 346 L370 342 M374 346 L378 342 M374 346 L374 340" stroke="#ca8a04" strokeWidth="1.5" strokeLinecap="round" />
-        <rect x="394" y="336" width="76" height="8" rx="4" fill="#1a1a2e" opacity="0.75" />
-        <rect x="394" y="349" width="56" height="7" rx="3.5" fill="#ca8a04" opacity="0.65" />
-      </g>
-      <circle cx="70" cy="300" r="7" fill="#6C63FF" opacity="0.25" />
-      <circle cx="48" cy="278" r="4" fill="#00C2FF" opacity="0.3" />
-      <circle cx="92" cy="270" r="3" fill="#FF6B9D" opacity="0.4" />
-      <circle cx="450" cy="110" r="9" fill="#6C63FF" opacity="0.15" />
-      <circle cx="472" cy="140" r="5" fill="#00C2FF" opacity="0.25" />
-      <circle cx="440" cy="155" r="3" fill="#FF6B9D" opacity="0.3" />
-      <defs>
-        <linearGradient id="heroBlob" x1="0" y1="0" x2="1" y2="1">
-          <stop stopColor="#6C63FF" /><stop offset="1" stopColor="#00C2FF" />
-        </linearGradient>
-        <linearGradient id="avatarGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop stopColor="#6C63FF" /><stop offset="1" stopColor="#00C2FF" />
-        </linearGradient>
-        <linearGradient id="instaBg" x1="0" y1="0" x2="1" y2="0">
-          <stop stopColor="#833ab4" /><stop offset="0.5" stopColor="#fd1d1d" /><stop offset="1" stopColor="#fcb045" />
-        </linearGradient>
-        <linearGradient id="waBg" x1="0" y1="0" x2="1" y2="0">
-          <stop stopColor="#25D366" /><stop offset="1" stopColor="#128C7E" />
-        </linearGradient>
-        <linearGradient id="ttBg" x1="0" y1="0" x2="1" y2="0">
-          <stop stopColor="#010101" /><stop offset="1" stopColor="#EE1D52" />
-        </linearGradient>
-        <filter id="floatShadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="8" stdDeviation="14" floodColor="#6C63FF" floodOpacity="0.18" />
-        </filter>
-      </defs>
-    </svg>
-  );
-}
-
-function FeatIllus1() {
-  return (
-    <svg viewBox="0 0 200 160" fill="none" className="w-full max-w-[200px] mx-auto">
-      <rect x="20" y="10" width="160" height="140" rx="20" fill="#F0EEFF" />
-      <rect x="40" y="28" width="120" height="104" rx="14" fill="white" />
-      <circle cx="100" cy="62" r="20" fill="url(#fi1g)" />
-      <circle cx="100" cy="55" r="8" fill="white" opacity="0.9" />
-      <ellipse cx="100" cy="72" rx="12" ry="7" fill="white" opacity="0.9" />
-      <rect x="68" y="88" width="64" height="8" rx="4" fill="#1a1a2e" opacity="0.7" />
-      <rect x="52" y="104" width="96" height="14" rx="7" fill="url(#fi1g)" opacity="0.85" />
-      <rect x="52" y="122" width="96" height="14" rx="7" fill="url(#fi1c)" opacity="0.5" />
-      <defs>
-        <linearGradient id="fi1g" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#6C63FF"/><stop offset="1" stopColor="#9b8fff"/></linearGradient>
-        <linearGradient id="fi1c" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#00C2FF"/><stop offset="1" stopColor="#6C63FF"/></linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-function FeatIllus2() {
-  return (
-    <svg viewBox="0 0 200 160" fill="none" className="w-full max-w-[200px] mx-auto">
-      <rect x="10" y="10" width="180" height="140" rx="20" fill="#E8F7FF" />
-      <rect x="65" y="30" width="70" height="80" rx="10" fill="url(#fi2g)" />
-      <path d="M83 30 Q83 18 100 18 Q117 18 117 30" stroke="white" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-      <rect x="73" y="88" width="54" height="8" rx="4" fill="white" opacity="0.9" />
-      <rect x="79" y="100" width="42" height="7" rx="3.5" fill="white" opacity="0.7" />
-      <circle cx="155" cy="55" r="18" fill="#dcfce7" />
-      <text x="155" y="61" textAnchor="middle" fill="#16a34a" fontSize="16" fontWeight="bold">$</text>
-      <circle cx="44" cy="100" r="14" fill="#ede9fe" />
-      <text x="44" y="106" textAnchor="middle" fill="#7c3aed" fontSize="14" fontWeight="bold">+</text>
-      <defs>
-        <linearGradient id="fi2g" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#6C63FF"/><stop offset="1" stopColor="#00C2FF"/></linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
-function FeatIllus3() {
-  return (
-    <svg viewBox="0 0 200 160" fill="none" className="w-full max-w-[200px] mx-auto">
-      <rect x="10" y="10" width="180" height="140" rx="20" fill="#FFF0F6" />
-      <rect x="30" y="80" width="26" height="70" rx="6" fill="url(#fi3c)" />
-      <rect x="66" y="60" width="26" height="90" rx="6" fill="url(#fi3g)" />
-      <rect x="102" y="45" width="26" height="105" rx="6" fill="url(#fi3c)" opacity="0.75" />
-      <rect x="138" y="30" width="26" height="120" rx="6" fill="url(#fi3g)" />
-      <polyline points="43,80 79,60 115,45 151,30" stroke="#FF6B9D" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      {[43,79,115,151].map((x,i) => <circle key={i} cx={x} cy={[80,60,45,30][i]} r="4" fill="#FF6B9D" />)}
-      <defs>
-        <linearGradient id="fi3g" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#6C63FF"/><stop offset="1" stopColor="#6C63FF" stopOpacity="0.3"/></linearGradient>
-        <linearGradient id="fi3c" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#00C2FF"/><stop offset="1" stopColor="#00C2FF" stopOpacity="0.3"/></linearGradient>
-      </defs>
-    </svg>
-  );
-}
-
 /* ─────────────────────────────────────────────
    DECORATIVE SHAPES
 ───────────────────────────────────────────── */
@@ -207,11 +94,11 @@ function BgShapes({ variant = 'default' }: { variant?: 'default'|'dark'|'light' 
         <div className="absolute top-1/2 -right-20 w-64 h-64 rounded-full opacity-[0.06]"
           style={{ background: 'radial-gradient(circle,#00C2FF,transparent)' }} />
         <svg className="absolute top-20 right-10 opacity-[0.06]" width="120" height="120" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="55" stroke="#6C63FF" strokeWidth="1.5" fill="none" />
-          <circle cx="60" cy="60" r="40" stroke="#6C63FF" strokeWidth="1" fill="none" />
+          <circle cx="60" cy="60" r="55" stroke={BRAND.violet} strokeWidth="1.5" fill="none" />
+          <circle cx="60" cy="60" r="40" stroke={BRAND.violet} strokeWidth="1" fill="none" />
         </svg>
         <svg className="absolute bottom-20 left-10 opacity-[0.06]" width="80" height="80" viewBox="0 0 80 80">
-          <rect x="5" y="5" width="70" height="70" rx="12" stroke="#00C2FF" strokeWidth="1.5" fill="none" transform="rotate(15 40 40)" />
+          <rect x="5" y="5" width="70" height="70" rx="12" stroke={BRAND.cyan} strokeWidth="1.5" fill="none" transform="rotate(15 40 40)" />
         </svg>
       </>}
       {variant === 'light' && <>
@@ -220,11 +107,11 @@ function BgShapes({ variant = 'default' }: { variant?: 'default'|'dark'|'light' 
         <div className="absolute bottom-0 left-10 w-64 h-64 rounded-full opacity-[0.04]"
           style={{ background: 'radial-gradient(circle,#00C2FF,transparent)' }} />
         <svg className="absolute top-10 left-10 opacity-[0.07]" width="100" height="100" viewBox="0 0 100 100">
-          <polygon points="50,5 95,75 5,75" stroke="#6C63FF" strokeWidth="1.5" fill="none" />
+          <polygon points="50,5 95,75 5,75" stroke={BRAND.violet} strokeWidth="1.5" fill="none" />
         </svg>
         <svg className="absolute bottom-10 right-10 opacity-[0.07]" width="90" height="90" viewBox="0 0 90 90">
-          <circle cx="45" cy="45" r="40" stroke="#FF6B9D" strokeWidth="1.5" fill="none" />
-          <circle cx="45" cy="45" r="28" stroke="#FF6B9D" strokeWidth="1" fill="none" />
+          <circle cx="45" cy="45" r="40" stroke={BRAND.pink} strokeWidth="1.5" fill="none" />
+          <circle cx="45" cy="45" r="28" stroke={BRAND.pink} strokeWidth="1" fill="none" />
         </svg>
       </>}
     </div>
@@ -232,31 +119,11 @@ function BgShapes({ variant = 'default' }: { variant?: 'default'|'dark'|'light' 
 }
 
 /* ─────────────────────────────────────────────
-   SCROLL ANIMATION WRAPPER
-───────────────────────────────────────────── */
-function AnimSection({ children, className = '', delay = 0, direction = 'up' }:
-  { children: React.ReactNode; className?: string; delay?: number; direction?: 'up'|'left'|'right'|'none' }) {
-  const { ref, visible } = useScrollAnimation(0.1);
-  const base = 'transition-all duration-700 ease-out';
-  const hidden = direction === 'up'    ? 'opacity-0 translate-y-10'
-               : direction === 'left'  ? 'opacity-0 -translate-x-10'
-               : direction === 'right' ? 'opacity-0 translate-x-10'
-               : 'opacity-0';
-  const show = 'opacity-100 translate-y-0 translate-x-0';
-  return (
-    <div ref={ref} className={`${base} ${visible ? show : hidden} ${className}`}
-      style={{ transitionDelay: visible ? `${delay}ms` : '0ms' }}>
-      {children}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
    STAT CARD
 ───────────────────────────────────────────── */
-function StatCard({ target, suffix, label, icon: Icon, delay, dk }:
-  { target: number; suffix: string; label: string; icon: React.ComponentType<{size?:number;className?:string}>; delay: number; dk: boolean }) {
-  const { ref, display } = useCountUp(target, 1600, suffix);
+function StatCard({ target, suffix, label, icon: Icon, delay, dk, decimals = 0 }:
+  { target: number; suffix: string; label: string; icon: LucideIcon; delay: number; dk: boolean; decimals?: number }) {
+  const { ref, display } = useCountUp(target, 1600, suffix, decimals);
   const { ref: animRef, visible } = useScrollAnimation(0.3);
 
   return (
@@ -355,9 +222,27 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
   const { isDark, lang, t, toggleDark, setLang: setLangCtx } = useAppPrefs();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [langOpen, setLangOpen] = useState(false);
-  const langMenuRef = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<PublicStats | null>(null);
+  const [show3d, setShow3d] = useState(false);
 
+  // Chiffres réels (créateurs, ventes, note moyenne)
+  useEffect(() => {
+    let alive = true;
+    fetchPublicStats().then(r => { if (alive) setStats(r); });
+    return () => { alive = false; };
+  }, []);
+
+  // L'animation 3D se charge quand le navigateur est disponible, jamais en mode économie de données
+  useEffect(() => {
+    if (isLowBandwidth()) return;
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (n: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => setShow3d(true), { timeout: 1500 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const id = setTimeout(() => setShow3d(true), 600);
+    return () => clearTimeout(id);
+  }, []);
   /* ── Scroll handler ── */
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -365,25 +250,9 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  /* ── Close lang dropdown on outside click ── */
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
-        setLangOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
     setMenuOpen(false);
-  };
-
-  const changeLang = (l: LandingLang) => {
-    setLangCtx(l);
-    setLangOpen(false);
   };
 
   /* ── Theme shortcuts ── */
@@ -404,9 +273,17 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
   const navBorder = scrolled ? (dk ? '#1e1e3f' : '#f3f4f6') : 'transparent';
   const cardBg     = dk ? '#111128' : '#fff';
   const cardBorder = dk ? '#1e1e3f' : '#f3f4f6';
-  const txtPrimary = dk ? '#f0f0ff' : '#1a1a2e';
+  const txtPrimary = dk ? '#f0f0ff' : BRAND.navy;
   const txtSub     = dk ? 'text-gray-400' : 'text-gray-500';
   const menuBg     = dk ? '#0d0d22' : '#fff';
+
+  // Chiffres réels uniquement : une donnée indisponible ou nulle n'est pas affichée
+  const statItems: { target: number; suffix: string; decimals?: number; label: string; icon: LucideIcon }[] = [];
+  if (stats?.shops) statItems.push({ target: stats.shops, suffix: '', label: t.statsCreators, icon: Users });
+  if (stats?.sales) statItems.push({ target: stats.sales, suffix: '', label: t.statsSales, icon: ShoppingBag });
+  if (stats?.rating) statItems.push({ target: stats.rating, suffix: '/5', decimals: 1, label: t.statsSatisfaction, icon: Star });
+  statItems.push({ target: 2, suffix: ' min', label: t.statsTime, icon: Zap });
+  const statCols = statItems.length >= 4 ? 'md:grid-cols-4' : statItems.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2';
 
   const NAV_LINKS = [
     [t.navFeatures, 'features'],
@@ -414,13 +291,6 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     [t.navPricing,  'pricing'],
     [t.reviewsTag,  'reviews'],
   ] as const;
-
-  const LANG_OPTIONS: { code: LandingLang; label: string }[] = [
-    { code: 'fr', label: '🇫🇷 Français'  },
-    { code: 'en', label: '🇬🇧 English'   },
-    { code: 'pt', label: '🇵🇹 Português' },
-    { code: 'de', label: '🇩🇪 Deutsch'   },
-  ];
 
   return (
     <div className="min-h-screen font-sans antialiased overflow-x-hidden" style={{ background: bg0, color: txtPrimary }}>
@@ -432,11 +302,11 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
           {/* Logo */}
           <a href="/" className="flex items-center gap-2.5 shrink-0">
-            <img src="/logo.png" alt="BioLinkWD" className="h-9 w-auto"
+            <img src="/logo-sm.png" alt="BioLinkWD" className="h-9 w-auto"
               onError={e => { e.currentTarget.style.display='none'; (e.currentTarget.nextSibling as HTMLElement).style.display='flex'; }} />
             <div className="hidden items-center gap-2">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                style={{ background: GRADIENTS.brand }}>
                 <Link2 size={16} className="text-white" />
               </div>
               <span className="font-extrabold text-lg" style={{ color: txtPrimary }}>BioLinkWD</span>
@@ -456,44 +326,25 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
 
           {/* Right controls */}
           <div className="flex items-center gap-2">
-            {/* Dark mode toggle */}
-            <button onClick={toggleDark}
-              title={dk ? t.darkOff : t.darkOn}
+            <ThemeToggle isDark={dk} onToggle={toggleDark} label={dk ? t.darkOff : t.darkOn} iconSize={17}
               className="p-2 rounded-xl transition-colors"
-              style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }}>
-              {dk ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
+              style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }} />
 
-            {/* Language selector */}
-            <div className="relative" ref={langMenuRef}>
-              <button onClick={() => setLangOpen(v => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
-                style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#c0c0e0' : '#6b7280' }}>
-                <Globe size={13} />
-                {lang.toUpperCase()}
-              </button>
-              {langOpen && (
-                <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
-                  style={{ background: dk ? '#111128' : '#fff', borderColor: cardBorder }}>
-                  {LANG_OPTIONS.map(({ code, label }) => (
-                    <button key={code} onClick={() => changeLang(code)}
-                      className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
-                      style={{
-                        color: lang === code ? '#6C63FF' : (dk ? '#c0c0e0' : '#374151'),
-                        background: lang === code ? (dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff') : 'transparent',
-                      }}>
-                      {label}
-                      {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LanguageMenu value={lang} onChange={setLangCtx} iconSize={13}
+              buttonClassName="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
+              buttonStyle={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#c0c0e0' : '#6b7280' }}
+              menuClassName="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
+              menuStyle={{ background: dk ? '#111128' : '#fff', borderColor: cardBorder }}
+              itemStyle={a => ({
+                color: a ? BRAND.violet : (dk ? '#c0c0e0' : '#374151'),
+                background: a ? (dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff') : 'transparent',
+              })}
+              checkSize={11} checkClassName="ml-auto text-brand-violet" />
 
             {/* Login — desktop only */}
             <button onClick={onLogin}
               className="hidden md:block text-sm font-semibold transition-colors px-4 py-2 rounded-xl"
-              style={{ color: '#6C63FF', background: dk ? 'rgba(108,99,255,0.1)' : 'transparent' }}
+              style={{ color: BRAND.violet, background: dk ? 'rgba(108,99,255,0.1)' : 'transparent' }}
               onMouseEnter={e => (e.currentTarget.style.background = dk ? 'rgba(108,99,255,0.2)' : '#f5f3ff')}
               onMouseLeave={e => (e.currentTarget.style.background = dk ? 'rgba(108,99,255,0.1)' : 'transparent')}>
               {t.navLogin}
@@ -501,7 +352,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             {/* Register — desktop only */}
             <button onClick={onRegister}
               className="hidden md:block text-sm font-bold text-white px-5 py-2.5 rounded-xl shadow-md shadow-purple-200 transition-all hover:shadow-lg hover:-translate-y-0.5"
-              style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+              style={{ background: GRADIENTS.brand }}>
               {t.navRegister}
             </button>
             {/* Hamburger */}
@@ -566,12 +417,12 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         <div className="px-4 pb-8 pt-4 space-y-3 border-t" style={{ borderColor: cardBorder }}>
           <button onClick={() => { setMenuOpen(false); onLogin(); }}
             className="w-full py-3 rounded-xl text-sm font-semibold border-2 transition-all"
-            style={{ color: '#6C63FF', borderColor: dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe', background: dk ? 'rgba(108,99,255,0.08)' : 'transparent' }}>
+            style={{ color: BRAND.violet, borderColor: dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe', background: dk ? 'rgba(108,99,255,0.08)' : 'transparent' }}>
             {t.navLogin}
           </button>
           <button onClick={() => { setMenuOpen(false); onRegister(); }}
             className="w-full py-3 rounded-xl text-sm font-bold text-white shadow-md transition-all hover:-translate-y-0.5"
-            style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+            style={{ background: GRADIENTS.brand }}>
             {t.navRegister}
           </button>
         </div>
@@ -588,8 +439,8 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         <div className="absolute inset-0 opacity-[0.035]"
           style={{ backgroundImage: 'radial-gradient(#6C63FF 1.5px,transparent 1.5px)', backgroundSize: '32px 32px' }} />
         <svg className="absolute right-12 top-24 opacity-[0.07] hidden lg:block" width="160" height="160" viewBox="0 0 160 160">
-          <circle cx="80" cy="80" r="75" stroke="#6C63FF" strokeWidth="1.5" fill="none" />
-          <circle cx="80" cy="80" r="55" stroke="#6C63FF" strokeWidth="1" fill="none" />
+          <circle cx="80" cy="80" r="75" stroke={BRAND.violet} strokeWidth="1.5" fill="none" />
+          <circle cx="80" cy="80" r="55" stroke={BRAND.violet} strokeWidth="1" fill="none" />
         </svg>
 
         <div className="max-w-6xl mx-auto px-5 w-full grid lg:grid-cols-2 gap-12 items-center py-16">
@@ -607,31 +458,41 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 {t.heroTitle}
                 <span className="relative ml-3 inline-block">
                   <span className="relative z-10 bg-clip-text text-transparent"
-                    style={{ backgroundImage: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>{t.heroHighlight}</span>
+                    style={{ backgroundImage: GRADIENTS.brand }}>{t.heroHighlight}</span>
                   <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 100 8" fill="none" preserveAspectRatio="none">
                     <path d="M2 6 Q50 1 98 6" stroke="url(#uGrad)" strokeWidth="3" strokeLinecap="round" />
-                    <defs><linearGradient id="uGrad" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#6C63FF"/><stop offset="1" stopColor="#00C2FF"/></linearGradient></defs>
+                    <defs><linearGradient id="uGrad" x1="0" y1="0" x2="1" y2="0"><stop stopColor={BRAND.violet}/><stop offset="1" stopColor={BRAND.cyan}/></linearGradient></defs>
                   </svg>
                 </span>
               </h1>
             </AnimSection>
 
-            <AnimSection direction="up" delay={200}>
-              <p className={`text-lg leading-relaxed mb-8 max-w-md ${txtSub}`}>{t.heroSub}</p>
+            <AnimSection direction="up" delay={150}>
+              <p className="text-xl sm:text-2xl font-semibold leading-snug mb-3 max-w-lg" style={{ color: txtPrimary }}>{t.heroDesign}</p>
+            </AnimSection>
+
+            <AnimSection direction="up" delay={220}>
+              <p className={`text-lg leading-relaxed mb-8 max-w-lg ${txtSub}`}>{t.heroSub}</p>
             </AnimSection>
 
             <AnimSection direction="up" delay={300}>
               <div className="flex flex-wrap gap-4 mb-10">
                 <button onClick={onRegister}
                   className="flex items-center gap-2 text-white font-bold px-7 py-3.5 rounded-2xl shadow-lg shadow-purple-200 transition-all hover:shadow-xl hover:-translate-y-1"
-                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                  style={{ background: GRADIENTS.brand }}>
                   {t.heroCta1}<ArrowRight size={18} />
                 </button>
                 <button onClick={() => scrollTo('howto')}
                   className="flex items-center gap-2 font-semibold px-6 py-3.5 rounded-2xl border-2 transition-all"
-                  style={{ color: '#6C63FF', borderColor: dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe', background: dk ? 'rgba(108,99,255,0.08)' : '#fff' }}>
+                  style={{ color: BRAND.violet, borderColor: dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe', background: dk ? 'rgba(108,99,255,0.08)' : '#fff' }}>
                   {t.heroCta2}
                 </button>
+                {DEMO_SHOP && (
+                  <a href={`/u/${DEMO_SHOP}`}
+                    className="flex items-center gap-2 font-semibold px-2 py-3.5 text-brand-violet underline-offset-4 hover:underline">
+                    {t.demoCta}<ExternalLink size={16} aria-hidden />
+                  </a>
+                )}
               </div>
             </AnimSection>
 
@@ -652,7 +513,11 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
           </div>
 
           <AnimSection direction="right" delay={200} className="flex justify-center lg:justify-end">
-            <HeroIllustration />
+            {show3d ? (
+              <Suspense fallback={<PhonePlaceholder />}>
+                <PhoneShowcase />
+              </Suspense>
+            ) : <PhonePlaceholder />}
           </AnimSection>
         </div>
       </section>
@@ -662,11 +527,11 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         style={{ background: dk ? '#0d0d22' : '#fff', borderColor: cardBorder }}>
         <BgShapes variant="default" />
         <div className="max-w-5xl mx-auto px-5 relative z-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <StatCard target={100}  suffix="+"    label={t.statsCreators}    icon={Users}       delay={0}   dk={dk} />
-            <StatCard target={500}  suffix="+"    label={t.statsSales}       icon={ShoppingBag} delay={100} dk={dk} />
-            <StatCard target={98}   suffix="%"    label={t.statsSatisfaction} icon={Star}       delay={200} dk={dk} />
-            <StatCard target={2}    suffix=" min" label={t.statsTime}        icon={Zap}         delay={300} dk={dk} />
+          <div className={`grid grid-cols-2 ${statCols} gap-8 text-center`}>
+            {statItems.map((it, i) => (
+              <StatCard key={it.label} target={it.target} suffix={it.suffix} decimals={it.decimals} label={it.label}
+                icon={it.icon} delay={i * 100} dk={dk} />
+            ))}
           </div>
         </div>
       </section>
@@ -695,7 +560,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               <div className="flex items-center gap-3 rounded-2xl px-5 py-3 border shadow-sm"
                 style={{ background: cardBg, borderColor: cardBorder }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                  style={{ background: GRADIENTS.brand }}>
                   <CreditCard size={16} className="text-white" />
                 </div>
                 <span className="text-sm font-bold" style={{ color: txtPrimary }}>{t.payCard}</span>
@@ -712,6 +577,8 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
           </AnimSection>
         </div>
       </section>
+
+      <BeforeAfterSection t={t} dk={dk} />
 
       {/* ══ FEATURES ══ */}
       <section id="features" className="py-24 px-5 relative overflow-hidden" style={{ background: bgFeat }}>
@@ -742,7 +609,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 ],
               },
               {
-                accent: '#6C63FF', bg: dk ? '#1a1535' : '#F0EEFF', tag: t.catBoostTag,
+                accent: BRAND.violet, bg: dk ? '#1a1535' : '#F0EEFF', tag: t.catBoostTag,
                 icon: Sparkle, title: t.catBoostTitle, desc: t.catBoostDesc,
                 perks: [
                   { Icon: Sparkle, text: t.catBoost1 },
@@ -752,7 +619,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 ],
               },
               {
-                accent: '#FF6B9D', bg: dk ? '#201520' : '#FFF0F6', tag: t.catTrustTag,
+                accent: BRAND.pink, bg: dk ? '#201520' : '#FFF0F6', tag: t.catTrustTag,
                 icon: ShieldCheck, title: t.catTrustTitle, desc: t.catTrustDesc,
                 perks: [
                   { Icon: Award, text: t.catTrust1 },
@@ -762,7 +629,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 ],
               },
               {
-                accent: '#00C2FF', bg: dk ? '#0f1e2e' : '#E8F7FF', tag: t.catGrowTag,
+                accent: BRAND.cyan, bg: dk ? '#0f1e2e' : '#E8F7FF', tag: t.catGrowTag,
                 icon: LineChart, title: t.catGrowTitle, desc: t.catGrowDesc,
                 perks: [
                   { Icon: Gift, text: t.catGrow1 },
@@ -817,9 +684,9 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
           <div className="grid md:grid-cols-3 gap-10 relative">
             <div className="hidden md:block absolute top-12 left-[calc(33%+16px)] right-[calc(33%+16px)] h-px bg-gradient-to-r from-brand-violet to-brand-cyan opacity-20 z-0" />
             {[
-              { icon: UserPlus, color: '#6C63FF', bg: dk ? '#1a1535' : '#F0EEFF', step: 1, title: t.step1Title, desc: t.step1Desc },
-              { icon: Palette,  color: '#00C2FF', bg: dk ? '#0f1e2e' : '#E8F7FF', step: 2, title: t.step2Title, desc: t.step2Desc },
-              { icon: Share2,   color: '#FF6B9D', bg: dk ? '#201520' : '#FFF0F6', step: 3, title: t.step3Title, desc: t.step3Desc },
+              { icon: UserPlus, color: BRAND.violet, bg: dk ? '#1a1535' : '#F0EEFF', step: 1, title: t.step1Title, desc: t.step1Desc },
+              { icon: Palette,  color: BRAND.cyan, bg: dk ? '#0f1e2e' : '#E8F7FF', step: 2, title: t.step2Title, desc: t.step2Desc },
+              { icon: Share2,   color: BRAND.pink, bg: dk ? '#201520' : '#FFF0F6', step: 3, title: t.step3Title, desc: t.step3Desc },
             ].map(({ icon: Icon, color, bg, step, title, desc }, i) => (
               <AnimSection key={title} direction="up" delay={i * 150} className="relative z-10">
                 <div className="text-center group">
@@ -829,7 +696,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                       <Icon size={38} style={{ color }} />
                     </div>
                     <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full text-white text-xs font-black flex items-center justify-center shadow-md"
-                      style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>{step}</div>
+                      style={{ background: GRADIENTS.brand }}>{step}</div>
                   </div>
                   <h3 className="text-lg font-black mb-2" style={{ color: txtPrimary }}>{title}</h3>
                   <p className={`text-sm leading-relaxed ${txtSub}`}>{desc}</p>
@@ -860,15 +727,15 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               <div className="grid md:grid-cols-3 gap-6 mb-8">
                 {[
                   { pct: '5%', label: t.refL1, color: '#22c55e', bg: dk ? '#0d2318' : '#ecfdf5', tier: 'L1' },
-                  { pct: '2%', label: t.refL2, color: '#00C2FF', bg: dk ? '#0f1e2e' : '#E8F7FF', tier: 'L2' },
-                  { pct: '1%', label: t.refL3, color: '#6C63FF', bg: dk ? '#1a1535' : '#F0EEFF', tier: 'L3' },
+                  { pct: '2%', label: t.refL2, color: BRAND.cyan, bg: dk ? '#0f1e2e' : '#E8F7FF', tier: 'L2' },
+                  { pct: '1%', label: t.refL3, color: BRAND.violet, bg: dk ? '#1a1535' : '#F0EEFF', tier: 'L3' },
                 ].map(({ pct, label, color, bg, tier }, i) => (
                   <div key={tier} className="relative rounded-2xl p-6 text-center border-2 transition-transform hover:-translate-y-1"
                     style={{ background: bg, borderColor: color + '40' }}>
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-black px-3 py-1 rounded-full text-white shadow"
                       style={{ background: color }}>{tier}</div>
                     <div className="text-5xl font-black mb-2" style={{ color }}>{pct}</div>
-                    <div className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : '#1a1a2e' }}>{label}</div>
+                    <div className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : BRAND.navy }}>{label}</div>
                     {i < 2 && (
                       <ArrowRight size={20} className="hidden md:block absolute top-1/2 -right-4 -translate-y-1/2 z-10"
                         style={{ color: dk ? '#4b5563' : '#cbd5e1' }} />
@@ -890,7 +757,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               <div className="text-center">
                 <button onClick={onRegister}
                   className="inline-flex items-center gap-2 text-white font-bold px-7 py-3.5 rounded-2xl shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
-                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                  style={{ background: GRADIENTS.brand }}>
                   {t.refCta}<ArrowRight size={18} />
                 </button>
               </div>
@@ -948,7 +815,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                   <button
                     onClick={onRegister}
                     className={`w-full py-3 rounded-2xl text-sm font-bold transition-all hover:-translate-y-0.5 ${highlighted ? 'bg-gradient-to-r from-brand-violet to-brand-cyan text-white shadow-lg shadow-purple-500/30' : ''}`}
-                    style={!highlighted ? { border: `2px solid ${dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe'}`, color: '#6C63FF', background: dk ? 'rgba(108,99,255,0.08)' : 'transparent' } : {}}
+                    style={!highlighted ? { border: `2px solid ${dk ? 'rgba(108,99,255,0.4)' : '#ddd6fe'}`, color: BRAND.violet, background: dk ? 'rgba(108,99,255,0.08)' : 'transparent' } : {}}
                   >
                     {id === 'free' ? t.pricingFree : `${t.pricingChoose} ${name}`}
                   </button>
@@ -961,7 +828,7 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <div className="mt-10 rounded-2xl px-6 py-4 flex items-center justify-center gap-3 border text-center"
               style={{ background: dk ? 'rgba(108,99,255,0.1)' : '#f5f3ff', borderColor: dk ? 'rgba(108,99,255,0.25)' : '#ddd6fe' }}>
               <QrCode size={18} className="text-brand-violet shrink-0" />
-              <span className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : '#1a1a2e' }}>{t.premiumQrCallout}</span>
+              <span className="text-sm font-semibold" style={{ color: dk ? '#e5e7eb' : BRAND.navy }}>{t.premiumQrCallout}</span>
             </div>
           </AnimSection>
         </div>
@@ -1040,17 +907,17 @@ export default function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       </section>
 
       {/* ══ FOOTER ══ */}
-      <footer style={{ background: dk ? '#030312' : '#1a1a2e', color: '#9ca3af' }} className="py-12 px-5">
+      <footer style={{ background: dk ? '#030312' : BRAND.navy, color: '#9ca3af' }} className="py-12 px-5">
         <div className="max-w-6xl mx-auto">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2.5 mb-3">
-                <img src="/logo.png" alt="BioLinkWD" className="h-8 w-auto brightness-200"
+                <img src="/logo-sm.png" alt="BioLinkWD" className="h-8 w-auto brightness-200"
                   onError={e => { e.currentTarget.style.display='none'; }} />
                 <span className="text-white font-bold">BioLinkWD</span>
               </div>
-              <p className="text-xs font-semibold mb-2" style={{ color: '#6C63FF' }}>by WhiteDuckSaaS</p>
+              <p className="text-xs font-semibold mb-2" style={{ color: BRAND.violet }}>by WhiteDuckSaaS</p>
               <p className="text-sm leading-relaxed text-gray-500">{t.footerDesc}</p>
             </div>
 

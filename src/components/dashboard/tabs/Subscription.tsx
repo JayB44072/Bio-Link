@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { Profile, PlanType } from '../../../lib/types';
 import { PLAN_CONFIGS } from '../../../lib/planLimits';
+import { planFeatureRows } from '../../../lib/planFeatures';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
+import { BRAND, GRADIENTS } from '../../../lib/theme';
+import { dashPalette } from '../../../lib/dashPalette';
+import Modal from '../../ui/Modal';
 import {
   Check, Zap, Crown, Star, Briefcase, Gift, Lock, Unlock,
   Smartphone, ShieldCheck, X, ArrowLeft, Loader2, CreditCard,
@@ -19,7 +23,7 @@ const PLAN_ICONS: Record<PlanType, React.ComponentType<{ size?: number; classNam
 };
 
 const PLAN_ACCENTS: Record<PlanType, string> = {
-  free: '#9ca3af', starter: '#6C63FF', business: '#00C2FF', premium: '#FF6B9D',
+  free: '#9ca3af', starter: BRAND.violet, business: BRAND.cyan, premium: BRAND.pink,
 };
 
 type Operator = 'mtn' | 'orange' | 'card';
@@ -82,13 +86,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
   const [cardName, setCardName] = useState('');
 
   /* ── Theme tokens ── */
-  const surface    = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt = dk ? '#191938' : '#faf9ff';
-  const border     = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim    = dk ? '#f2f1ff' : '#16162e';
-  const txtSub     = dk ? '#8c8ab0' : '#8a87a3';
-  const inputBg    = dk ? '#0d0d22' : '#faf9ff';
-  const inputBorder= dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
+  const { surface, surfaceAlt, border, txtPrim, txtSub, inputBg, inputBorder } = dashPalette(dk);
 
   function openPayModal(plan: PlanType) {
     if (plan === profile.plan_type) return;
@@ -208,28 +206,6 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
 
   const plans: PlanType[] = ['free', 'starter', 'business', 'premium'];
 
-  function getPlanFeatures(plan: PlanType): string[] {
-    const features: string[] = [];
-    if (plan === 'free') features.push(t.feat_products_free);
-    else if (plan === 'starter') features.push(t.feat_products_starter);
-    else if (plan === 'business') features.push(t.feat_products_business);
-    else features.push(t.feat_products_premium);
-    if (plan === 'free') features.push(t.feat_social_free);
-    else features.push(t.feat_social_paid);
-    if (plan === 'free') features.push(t.feat_theme_free);
-    else features.push(t.feat_theme_paid);
-    if (plan === 'free' || plan === 'starter') features.push(t.feat_stats_locked);
-    else features.push(t.feat_stats_access);
-    if (plan === 'free') features.push(t.feat_badge_free);
-    else features.push(t.feat_badge_paid);
-    if (plan === 'free') features.push(t.feat_logo_free);
-    else features.push(t.feat_logo_paid);
-    if (plan === 'premium') features.push(t.feat_withdrawal_priority);
-    else features.push(t.feat_withdrawal_standard);
-    features.push(t.feat_commission(PLAN_CONFIGS[plan].commission_rate * 100));
-    return features;
-  }
-
   const selectedOp = OPERATORS.find(o => o.id === operator);
   const planLabel = payModalPlan ? PLAN_CONFIGS[payModalPlan].name[lang as 'fr' | 'en'] : '';
   const planPrice = payModalPlan ? PLAN_CONFIGS[payModalPlan].price_fcfa : 0;
@@ -265,7 +241,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
           const Icon = PLAN_ICONS[plan];
           const isCurrent = profile.plan_type === plan;
           const isPopular = plan === 'business';
-          const features = getPlanFeatures(plan);
+          const features = planFeatureRows(plan, lang);
 
           return (
             <div key={plan}
@@ -295,7 +271,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                   </div>
                   <div>
                     <h3 className="font-bold" style={{ color: txtPrim }}>{config.name[lang as 'fr' | 'en']}</h3>
-                    {isPopular && <span className="text-xs font-bold" style={{ color: '#00C2FF' }}>{t.mostPopular}</span>}
+                    {isPopular && <span className="text-xs font-bold" style={{ color: BRAND.cyan }}>{t.mostPopular}</span>}
                   </div>
                 </div>
 
@@ -314,18 +290,18 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                 </div>
 
                 <ul className="space-y-2.5">
-                  {features.map((feat, i) => {
-                    const isLocked = feat.includes('bloqué') || feat.includes('locked') || feat.includes('uniquement') || feat.includes('only') || feat.includes('badge');
-                    return (
-                      <li key={i} className="flex items-start gap-2 text-xs font-medium"
-                        style={{ color: isLocked ? txtSub : txtPrim }}>
-                        {isLocked
-                          ? <Lock size={12} className="mt-0.5 shrink-0" style={{ color: txtSub }} />
-                          : <Check size={12} className="mt-0.5 shrink-0" style={{ color: accent }} />}
-                        {feat}
-                      </li>
-                    );
-                  })}
+                  {features.map(feat => (
+                    <li key={feat.id} className="flex items-start gap-2 text-xs font-medium"
+                      style={{ color: feat.included ? txtPrim : txtSub }}>
+                      {feat.included
+                        ? <Check size={12} aria-hidden className="mt-0.5 shrink-0" style={{ color: accent }} />
+                        : <Lock size={12} aria-hidden className="mt-0.5 shrink-0" style={{ color: txtSub }} />}
+                      <span>
+                        {feat.text}
+                        <span className="sr-only">{feat.included ? (lang === 'fr' ? ' (inclus)' : ' (included)') : (lang === 'fr' ? ' (non inclus)' : ' (not included)')}</span>
+                      </span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 
@@ -353,7 +329,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
 
       {/* ══ Payment modal ══ */}
       {payModalPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <Modal onClose={closePayModal}>
           <div className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl" style={{ background: surface }}>
 
             {/* Header */}
@@ -407,7 +383,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                       {selectedOp.logo ? (
                         <img src={selectedOp.logo} alt={selectedOp.label} className="w-6 h-6 object-contain" />
                       ) : (
-                        <Smartphone size={14} color={selectedOp.id === 'mtn' ? '#1a1a2e' : '#fff'} />
+                        <Smartphone size={14} color={selectedOp.id === 'mtn' ? BRAND.navy : '#fff'} />
                       )}
                     </div>
                     <span className="font-bold text-sm" style={{ color: txtPrim }}>{selectedOp.label}</span>
@@ -426,7 +402,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                   </div>
                   <button type="submit"
                     className="w-full text-white font-bold py-3 rounded-2xl transition"
-                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    style={{ background: GRADIENTS.brand }}>
                     {c.validate}
                   </button>
                 </form>
@@ -511,7 +487,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
                   </div>
                   <button onClick={confirmUssd}
                     className="w-full text-white font-bold py-3 rounded-2xl transition"
-                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    style={{ background: GRADIENTS.brand }}>
                     {c.imDone}
                   </button>
                 </div>
@@ -520,7 +496,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
               {/* Step 4 — verifying */}
               {step === 'verifying' && (
                 <div className="text-center py-4">
-                  <Loader2 size={36} className="animate-spin mx-auto mb-4" style={{ color: '#6C63FF' }} />
+                  <Loader2 size={36} className="animate-spin mx-auto mb-4" style={{ color: BRAND.violet }} />
                   <p className="font-bold text-sm mb-1" style={{ color: txtPrim }}>{c.verifying}</p>
                   <p className="text-xs" style={{ color: txtSub }}>{c.verifyingSub}</p>
                 </div>
@@ -544,7 +520,7 @@ export default function Subscription({ profile, onPlanChange }: SubscriptionProp
               )}
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

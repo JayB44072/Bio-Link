@@ -1,23 +1,47 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Profile, Product, Service, Transaction } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
-import { PLAN_CONFIGS, SHOP_THEMES, ShopThemeConfig } from '../../lib/planLimits';
+import { PLAN_CONFIGS } from '../../lib/planLimits';
+import { resolveHero } from '../../lib/shopTheme';
+import { heroStyleFor } from '../../lib/heroStyles';
+import ShopHero from './ShopHero';
+import PublicServiceWave, { type ServiceWaveTheme } from './PublicServiceWave';
+import ProductBlurb from './ProductBlurb';
+import SubscribeBox from './SubscribeBox';
+import ShareMenu from './ShareMenu';
+import Modal from '../ui/Modal';
+import OrderDetailsCard from './OrderDetailsCard';
+import { confirmDelivery, lookupOrders, sellerRecentOrders, type OrderSummary } from '../../lib/api/orders';
+import { useOrderDetails } from '../../lib/useOrderDetails';
+import { filterByQuery } from '../../lib/search';
+import { shareMessage } from '../../lib/seoCore';
+import { getSubscriberDeliveries, routeFromDetails, type OrderRoute } from '../../lib/api/orderRoutes';
+import { guessModelId } from '../../lib/product3d/catalog';
 import { LandingLang } from '../../lib/landingTranslations';
 import { supabase } from '../../lib/supabase';
 import { weightedRating } from '../../lib/ratingUtils';
 import PurchaseModal, { CartItem, buildWhatsAppOrderUrl } from './PurchaseModal';
+import ServiceDetailModal from './ServiceDetailModal';
 import ProductDetailPage from './ProductDetailPage';
 import ProductsMap from '../ui/ProductsMap';
 import LiveSalesToast from './LiveSalesToast';
 import { computeSellerBadges, ComputedBadge } from '../../lib/trustBadges';
+import LanguageMenu from '../ui/LanguageMenu';
+import ThemeToggle from '../ui/ThemeToggle';
+import { BRAND, GRADIENTS } from '../../lib/theme';
 import {
   Instagram, Music, Facebook, Twitter, Youtube, Linkedin,
   MessageCircle, Send, Globe, ShoppingBag, Briefcase, ExternalLink, Link2,
-  Sparkles, ArrowRight, Star, Clock, Search, ShoppingCart, Plus, Minus, X, Store, Check, Menu, PackageSearch,
+  Sparkles, ArrowRight, Star, Search, ShoppingCart, Plus, Minus, X, Store, Check, Menu, PackageSearch,
   Sun, Moon, Package, Truck, CheckCircle2, Loader2, ShieldCheck, MapPin, LucideIcon,
   Eye, Megaphone, Award, RefreshCw, Zap, Smartphone, CreditCard,
+  BellRing,
 } from 'lucide-react';
+
+// three.js n'est téléchargé que pour les boutiques dont le thème a un héros 3D
+const ProductHero3D = lazy(() => import('./ProductHero3D'));
+const ProductHeroScroll = lazy(() => import('./ProductHeroScroll'));
 
 const BADGE_ICON_MAP: Record<string, LucideIcon> = {
   shield: ShieldCheck,
@@ -112,15 +136,17 @@ interface PublicProfileViewProps {
    * où les media-queries Tailwind (md:/lg:) réagissent à la fenêtre du navigateur
    * et non à la largeur du conteneur. Laisser vide sur la vraie page publique. */
   previewMode?: 'mobile' | 'desktop';
+  /** Produit à ouvrir d'emblée (lien direct `/u/<boutique>/p/<produit>`). */
+  initialProductId?: string | null;
+  /** Prévenu quand le visiteur ouvre ou ferme une fiche produit (sert au référencement de la page). */
+  onProductChange?: (id: string | null) => void;
 }
 
-type TabId = 'links' | 'shop' | 'services' | 'tracking' | 'map';
+type TabId = 'links' | 'shop' | 'services' | 'tracking';
 
-export default function PublicProfileView({ profile, products, services, interactive = true, previewMode }: PublicProfileViewProps) {
+export default function PublicProfileView({ profile, products, services, interactive = true, previewMode, initialProductId = null, onProductChange }: PublicProfileViewProps) {
   const { t } = useLang();
   const { isDark: dk, toggleDark, lang, setLang } = useAppPrefs();
-  const [langOpen, setLangOpen] = useState(false);
-  const langRef = useRef<HTMLDivElement>(null);
   const forceMobile = previewMode === 'mobile';
   const forceDesktop = previewMode === 'desktop';
   const [localProducts, setLocalProducts] = useState<Product[]>(products);
@@ -129,27 +155,45 @@ export default function PublicProfileView({ profile, products, services, interac
   useEffect(() => {
     if (!profile.user_id) return;
     (async () => {
-      const { data } = await supabase
-        .from('transactions')
-        .select('id, status, created_at, shipped_at')
-        .eq('seller_id', profile.user_id)
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const data = await sellerRecentOrders(profile.user_id ?? '');
       const txs = (data || []) as Transaction[];
       setComputedBadges(computeSellerBadges(profile as Profile, txs));
     })();
   }, [profile.user_id, profile.plan_type, profile.updated_at]);
-  const [viewingProductId, setViewingProductId] = useState<string | null>(null);
+  const [viewingProductId, setViewingProductId] = useState<string | null>(initialProductId);
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [checkoutItem, setCheckoutItem] = useState<Product | null>(null);
   const [checkoutSource, setCheckoutSource] = useState<'buyNow' | 'cart' | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+  const [viewingService, setViewingService] = useState<Service | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const viewingProduct = viewingProductId ? localProducts.find(p => p.id === viewingProductId) ?? null : null;
 
   useEffect(() => { setLocalProducts(products); }, [products]);
+
+  // Chaque fiche produit a sa propre adresse (`/u/<boutique>/p/<id>`) : partageable et référençable.
+  useEffect(() => {
+    onProductChange?.(viewingProductId);
+    if (!interactive || !profile.username || !window.location.pathname.startsWith('/u/')) return;
+    const target = viewingProductId ? `/u/${profile.username}/p/${viewingProductId}` : `/u/${profile.username}`;
+    if (window.location.pathname.replace(/\/$/, '') !== target) window.history.pushState(null, '', target + window.location.search);
+    // seule l'ouverture / fermeture d'une fiche doit modifier l'adresse
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingProductId]);
+
+  // Bouton « précédent » du navigateur : referme la fiche
+  useEffect(() => {
+    if (!interactive) return;
+    const onPop = () => {
+      const m = window.location.pathname.match(/^\/u\/[^/]+\/p\/([0-9a-fA-F-]{36})\/?$/);
+      setViewingProductId(m ? m[1] : null);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [interactive]);
 
   const cartKey = `biolinkwd_cart_${profile.username || 'preview'}`;
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -174,7 +218,6 @@ export default function PublicProfileView({ profile, products, services, interac
     ...(activeProducts.length > 0 ? (['shop'] as TabId[]) : []),
     'links',
     ...(activeServices.length > 0 ? (['services'] as TabId[]) : []),
-    ...(hasMapAccess ? (['map'] as TabId[]) : []),
   ];
   const [tab, setTab] = useState<TabId>(activeProducts.length > 0 ? 'shop' : 'links');
   const currentTab = tab === 'tracking' ? 'tracking' : (availableTabs.includes(tab) ? tab : availableTabs[0]);
@@ -183,13 +226,38 @@ export default function PublicProfileView({ profile, products, services, interac
   const [trackingPhone, setTrackingPhone] = useState('');
   const [trackingCardLast4, setTrackingCardLast4] = useState('');
   const [trackingMethod, setTrackingMethod] = useState<'mobile' | 'card'>('mobile');
-  const [trackingOrders, setTrackingOrders] = useState<Transaction[] | null>(null);
+  const [trackingOrders, setTrackingOrders] = useState<OrderSummary[] | null>(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingSearched, setTrackingSearched] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [confirmingDelivery, setConfirmingDelivery] = useState(false);
+  const { details: orderDetails, loading: orderLoading, reload: reloadOrder } = useOrderDetails(selectedOrderId);
 
-  const selectedOrder = trackingOrders?.find(o => o.id === selectedOrderId) ?? null;
+  /* ── Livraisons d'un abonné : le jeton reçu dans les e-mails de la boutique remplace la saisie du téléphone ── */
+  const [subDeliveries, setSubDeliveries] = useState<OrderRoute[]>([]);
+  const [mapRouteId, setMapRouteId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!interactive || !profile.username) return;
+    const key = `biolinkwd_abo_${profile.username}`;
+    let token = '';
+    try {
+      const url = new URL(window.location.href);
+      const fromLink = url.searchParams.get('abo');
+      if (fromLink) {
+        localStorage.setItem(key, fromLink);
+        url.searchParams.delete('abo');
+        window.history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+        setTab('tracking');
+      }
+      token = localStorage.getItem(key) ?? '';
+    } catch { /* stockage indisponible : pas de livraisons enregistrées */ }
+    if (!token) return;
+    let alive = true;
+    getSubscriberDeliveries(token).then(r => { if (alive) setSubDeliveries(r); });
+    return () => { alive = false; };
+  }, [interactive, profile.username]);
+
+  const openedRoute = orderDetails ? routeFromDetails(orderDetails) : null;
+  const mapRoutes = openedRoute ? [openedRoute, ...subDeliveries.filter(d => d.id !== openedRoute.id)] : subDeliveries;
 
   async function searchOrders(e: React.FormEvent) {
     e.preventDefault();
@@ -198,39 +266,27 @@ export default function PublicProfileView({ profile, products, services, interac
     setTrackingLoading(true);
     setTrackingSearched(true);
     setSelectedOrderId(null);
-    const q = supabase
-      .from('transactions')
-      .select('*')
-      .eq('seller_id', profile.user_id || '')
-      .order('created_at', { ascending: false });
-    if (trackingMethod === 'mobile') {
-      q.eq('buyer_phone', trackingPhone.trim());
-    } else {
-      // For card orders, we need to look up by payment_method + a card identifier.
-      // Since we don't currently store card details for security, filter by payment_method='card'
-      // and by buyer_phone as fallback (phone was also captured on the card form).
-      q.eq('payment_method', 'card').eq('buyer_phone', trackingCardLast4.replace(/\D/g, ''));
-    }
-    const { data } = await q;
-    setTrackingOrders((data as Transaction[]) || []);
+    const found = await lookupOrders({
+      sellerId: profile.user_id || null,
+      ...(trackingMethod === 'mobile' ? { phone: trackingPhone.trim() } : { cardLast4: trackingCardLast4.replace(/\D/g, '') }),
+    });
+    setTrackingOrders(found);
+    // Une seule commande : on l'ouvre directement, sans clic de plus
+    if (found.length === 1) setSelectedOrderId(found[0].id);
     setTrackingLoading(false);
   }
 
-  async function confirmOrderDelivery() {
-    if (!selectedOrder) return;
-    setConfirmingDelivery(true);
-    const { data: sellerProf } = await supabase.from('profiles').select('*').eq('user_id', selectedOrder.seller_id).maybeSingle();
-    if (sellerProf) {
-      const newBalance = (sellerProf.wallet_balance || 0) + selectedOrder.seller_amount;
-      await supabase.from('profiles').update({ wallet_balance: newBalance }).eq('user_id', selectedOrder.seller_id);
+  /** Confirme la réception (le crédit du vendeur est fait côté serveur). Renvoie un message d'erreur, ou null. */
+  async function confirmOrderDelivery(): Promise<string | null> {
+    if (!selectedOrderId) return null;
+    const r = await confirmDelivery(selectedOrderId);
+    if (!r.ok) {
+      if (r.error === 'not_shipped') return lang === 'fr' ? "Le vendeur n'a pas encore expédié cette commande." : 'The seller has not shipped this order yet.';
+      return lang === 'fr' ? 'La confirmation est momentanément indisponible. Réessayez dans un instant.' : 'Confirmation is temporarily unavailable. Please try again shortly.';
     }
-    await supabase.from('transactions').update({
-      status: 'completed',
-      delivery_confirmed_at: new Date().toISOString(),
-    }).eq('id', selectedOrder.id);
-    setTrackingOrders(prev => prev?.map(o => o.id === selectedOrder.id
-      ? { ...o, status: 'completed', delivery_confirmed_at: new Date().toISOString() } : o) ?? null);
-    setConfirmingDelivery(false);
+    await reloadOrder();
+    setTrackingOrders(prev => prev?.map(o => o.id === selectedOrderId ? { ...o, status: 'completed' } : o) ?? null);
+    return null;
   }
 
   const distinctCategories = useMemo(() => {
@@ -247,23 +303,29 @@ export default function PublicProfileView({ profile, products, services, interac
     if (activeCategory) {
       list = list.filter(p => (p.category || '').trim() === activeCategory);
     }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-    }
-    return list;
+    return filterByQuery(list, search, p => [p.name, p.description, p.category]);
   }, [activeProducts, search, activeCategory]);
 
-  const filteredServices = useMemo(() => {
-    if (!search.trim()) return activeServices;
-    const q = search.toLowerCase();
-    return activeServices.filter(s => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
-  }, [activeServices, search]);
+  const filteredServices = useMemo(
+    () => filterByQuery(activeServices, search, s => [s.name, s.description]),
+    [activeServices, search],
+  );
+
+  /** Saisie dans la barre de recherche : on bascule sur l'onglet qui contient les résultats. */
+  function onSearchChange(value: string) {
+    setSearch(value);
+    if (value.trim() && currentTab !== 'shop' && currentTab !== 'services') {
+      setTab(activeProducts.length > 0 ? 'shop' : 'services');
+    }
+  }
 
   const showBadge = (profile.plan_type ?? 'free') === 'free';
 
   /* ══ Shop theme resolution ══ */
-  const shopTheme: ShopThemeConfig = SHOP_THEMES[profile.theme ?? 'default'] ?? SHOP_THEMES.default;
+  const hero = resolveHero(profile.theme, profile.plan_type);
+  const scrollHero = hero.mode === '3d' && hero.scroll;
+  const scrollToProducts = () => document.getElementById('shop-products')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const { themeId, modelId: themeModelId, config: shopTheme } = hero;
   /* Dark/light toggle respected on every theme.
      Only inherently-dark themes (luxury) ignore the toggle and stay dark. */
   const themeDark = shopTheme.inherentlyDark ? true : dk;
@@ -276,26 +338,32 @@ export default function PublicProfileView({ profile, products, services, interac
   const stSubtext = pick(shopTheme.subtextColor, shopTheme.subtextColorLight);
   const stHeaderBg = pick(shopTheme.headerBg, shopTheme.headerBgLight);
 
+  /* Couleurs et formes de la boutique pour les services (ruban de la liste et fiche d'un service) */
+  const serviceTheme: ServiceWaveTheme = {
+    dark: themeDark, pageBg: stPageBg, text: stText, subtext: stSubtext, cardBg: stCardBg, cardBorder: stCardBorder,
+    accent: shopTheme.accentColor ?? BRAND.violet, priceColor: shopTheme.priceColor,
+    buttonGradient: shopTheme.buttonGradient || GRADIENTS.pinkViolet,
+    cardRadius: shopTheme.cardRadius === 'rounded-none' ? 'rounded-none' : 'rounded-3xl',
+  };
+  const moreLabel = lang === 'fr' ? 'Voir plus' : 'See more';
   const cardBgStyle: React.CSSProperties = { background: stCardBg, borderColor: stCardBorder };
   const headerBg = '';
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const TAB_LABEL: Record<TabId, string> = {
     links: lang === 'fr' ? 'Réseaux' : 'Social',
     shop: lang === 'fr' ? 'Produits' : 'Products',
     services: lang === 'fr' ? 'Services' : 'Services',
-    tracking: lang === 'fr' ? 'Suivi' : 'Track',
-    map: lang === 'fr' ? 'Carte' : 'Map',
+    tracking: lang === 'fr' ? 'Carte & suivi' : 'Map & tracking',
   };
 
   const shopDisplayName = profile.shop_name || profile.display_name || profile.username || 'Boutique';
+  // Message d'invitation du bouton « Partager » : les produits phares de la boutique (sinon ses services)
+  const shareText = shareMessage(shopDisplayName, (activeProducts.length ? activeProducts : activeServices).map(i => i.name), lang);
+  // Produit du héros : choix du vendeur, sinon deviné d'après ses produits
+  const heroModelId = useMemo(
+    () => themeModelId ?? guessModelId(...activeProducts.slice(0, 12).flatMap(p => [p.name, p.category])),
+    [themeModelId, activeProducts],
+  );
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
@@ -417,17 +485,17 @@ export default function PublicProfileView({ profile, products, services, interac
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden font-sans antialiased"
+    <div className={`min-h-screen flex flex-col relative ${scrollHero ? 'overflow-x-clip' : 'overflow-x-hidden'} font-sans antialiased`}
       style={{ background: stPageBg }}>
 
       {/* ══ Formes décoratives d'arrière-plan selon le thème ══ */}
-      {(profile.theme === 'luxury') && (
+      {(themeId === 'luxury') && (
         <>
           <div className="absolute top-0 left-0 w-full h-[300px] pointer-events-none z-0" style={{ background: 'linear-gradient(180deg,rgba(201,169,110,0.08) 0%,transparent 100%)' }} />
           <div className="absolute bottom-0 right-0 w-[200px] h-[200px] rounded-full pointer-events-none z-0" style={{ background: 'radial-gradient(circle,rgba(201,169,110,0.06) 0%,transparent 70%)' }} />
         </>
       )}
-      {(profile.theme === 'vintage') && (
+      {(themeId === 'vintage') && (
         <div
           className="absolute inset-0 pointer-events-none z-0 opacity-40"
           style={{
@@ -435,7 +503,7 @@ export default function PublicProfileView({ profile, products, services, interac
           }}
         />
       )}
-      {(profile.theme === 'modern') && (
+      {(themeId === 'modern') && (
         <>
           <div className="absolute top-0 right-0 w-[45%] h-[280px] pointer-events-none z-0 opacity-70" style={{ background: 'radial-gradient(ellipse at top right, #e8c99b 0%, transparent 65%)' }} />
           <div className="absolute top-[120px] left-0 w-[35%] h-[220px] pointer-events-none z-0 opacity-50" style={{ background: 'radial-gradient(ellipse at bottom left, #d4a574 0%, transparent 60%)' }} />
@@ -452,7 +520,7 @@ export default function PublicProfileView({ profile, products, services, interac
               {profile.shop_logo_url ? (
                 <img src={profile.shop_logo_url} alt={shopDisplayName} className="w-full h-full object-cover" />
               ) : (profile.plan_type ?? 'free') === 'free' ? (
-                <img src="/logo.png" alt="BioLinkWD" className="w-full h-full object-contain p-1"
+                <img src="/logo-sm.png" alt="BioLinkWD" className="w-full h-full object-contain p-1"
                   onError={e => { e.currentTarget.style.display = 'none'; }} />
               ) : (
                 <Store size={16} style={{ color: stSubtext }} />
@@ -474,7 +542,6 @@ export default function PublicProfileView({ profile, products, services, interac
                 {tb === 'shop' && <ShoppingBag size={12} />}
                 {tb === 'services' && <Briefcase size={12} />}
                 {tb === 'links' && <Link2 size={12} />}
-                {tb === 'map' && <MapPin size={12} />}
                 {TAB_LABEL[tb]}
               </button>
             ))}
@@ -483,9 +550,17 @@ export default function PublicProfileView({ profile, products, services, interac
               style={currentTab === 'tracking'
                 ? { background: shopTheme.buttonGradient, color: '#fff' }
                 : { color: stSubtext, background: 'transparent' }}>
-              <PackageSearch size={12} />
+              <MapPin size={12} />
               {TAB_LABEL.tracking}
             </button>
+            {profile.username && (
+              <button onClick={() => setSubscribeOpen(true)}
+                className="ml-1 px-3.5 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1.5 text-white hover:-translate-y-0.5"
+                style={{ background: shopTheme.buttonGradient }}>
+                <BellRing size={12} />
+                {lang === 'fr' ? "S'abonner" : 'Subscribe'}
+              </button>
+            )}
           </nav>
 
           {/* Recherche */}
@@ -494,8 +569,11 @@ export default function PublicProfileView({ profile, products, services, interac
               <div className="flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3.5 py-1.5 sm:py-2" style={{ background: themeDark ? 'rgba(139,124,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
                 <Search size={13} className="shrink-0" style={{ color: stSubtext }} />
                 <input
+                  type="search"
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={e => onSearchChange(e.target.value)}
+                  aria-label={lang === 'fr' ? 'Rechercher un produit ou un service' : 'Search a product or service'}
+                  autoComplete="off"
                   placeholder={lang === 'fr' ? 'Rechercher...' : 'Search...'}
                   className="flex-1 min-w-0 w-full bg-transparent text-xs font-medium outline-none"
                   style={{ color: stText }}
@@ -506,35 +584,27 @@ export default function PublicProfileView({ profile, products, services, interac
 
           {/* Desktop : mode clair/sombre + langue + panier */}
           <div className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} items-center gap-1.5`}>
-            <button onClick={toggleDark}
+            <ThemeToggle isDark={themeDark} onToggle={toggleDark} iconSize={15}
               className="shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition"
-              style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }}>
-              {themeDark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-            <div className="relative shrink-0" ref={langRef}>
-              <button onClick={() => setLangOpen(v => !v)}
-                className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-colors"
-                style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }}>
-                <Globe size={12} />{lang.toUpperCase()}
-              </button>
-              {langOpen && (
-                <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
-                  style={{ background: stCardBg, borderColor: stCardBorder }}>
-                  {LANG_OPTIONS.map(({ code, label }) => (
-                    <button key={code} onClick={() => { setLang(code); setLangOpen(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
-                      style={{
-                        color: lang === code ? shopTheme.priceColor : stSubtext,
-                        background: lang === code ? (themeDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)') : 'transparent',
-                      }}>
-                      {label}
-                      {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+              style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }} />
+            <LanguageMenu value={lang} onChange={setLang} iconSize={12} className="shrink-0"
+              buttonClassName="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-colors"
+              buttonStyle={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', color: stSubtext }}
+              menuClassName="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
+              menuStyle={{ background: stCardBg, borderColor: stCardBorder }}
+              itemStyle={a => ({
+                color: a ? shopTheme.priceColor : stSubtext,
+                background: a ? (themeDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)') : 'transparent',
+              })}
+              checkSize={11} checkClassName="ml-auto text-brand-violet" />
           </div>
+
+          {interactive && (
+            <div className={`${forceDesktop ? 'flex' : forceMobile ? 'hidden' : 'hidden md:flex'} shrink-0`}>
+              <ShareMenu title={shopDisplayName} lang={lang} message={shareText}
+                colors={{ text: stText, subtext: stSubtext, cardBg: stCardBg, border: stCardBorder, hover: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }} />
+            </div>
+          )}
 
           {/* Panier — desktop uniquement (sur mobile il est dans le hamburger) */}
           <button onClick={() => interactive && setCartOpen(true)}
@@ -542,7 +612,7 @@ export default function PublicProfileView({ profile, products, services, interac
             style={{ background: themeDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
             <ShoppingCart size={15} style={{ color: stText }} />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-pink-600 text-white text-[9px] font-black flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-brand-pinkDark text-white text-[9px] font-black flex items-center justify-center">
                 {cartCount}
               </span>
             )}
@@ -577,7 +647,6 @@ export default function PublicProfileView({ profile, products, services, interac
                 {tb === 'shop' && <ShoppingBag size={16} />}
                 {tb === 'services' && <Briefcase size={16} />}
                 {tb === 'links' && <Link2 size={16} />}
-                {tb === 'map' && <MapPin size={16} />}
                 {TAB_LABEL[tb]}
               </button>
             ))}
@@ -586,9 +655,22 @@ export default function PublicProfileView({ profile, products, services, interac
               style={currentTab === 'tracking'
                 ? { background: shopTheme.buttonGradient, color: '#fff' }
                 : { color: stSubtext, background: 'transparent' }}>
-              <PackageSearch size={16} />
-              {lang === 'fr' ? 'Suivi de commande' : 'Track my order'}
+              <MapPin size={16} />
+              {TAB_LABEL.tracking}
             </button>
+            {profile.username && (
+              <button onClick={() => { setSubscribeOpen(true); setMenuOpen(false); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all text-white"
+                style={{ background: shopTheme.buttonGradient }}>
+                <BellRing size={16} />
+                {lang === 'fr' ? "S'abonner" : 'Subscribe'}
+              </button>
+            )}
+
+            {interactive && (
+              <ShareMenu variant="row" title={shopDisplayName} lang={lang} message={shareText}
+                colors={{ text: stText, subtext: stSubtext, cardBg: stCardBg, border: stCardBorder, hover: 'transparent' }} />
+            )}
 
             {/* Séparateur */}
             <div className="my-2 border-t" style={{ borderColor: stCardBorder }} />
@@ -600,7 +682,7 @@ export default function PublicProfileView({ profile, products, services, interac
               <ShoppingCart size={16} />
               {lang === 'fr' ? 'Panier' : 'Cart'}
               {cartCount > 0 && (
-                <span className="ml-auto min-w-[20px] h-[20px] px-1.5 rounded-full bg-pink-600 text-white text-[10px] font-black flex items-center justify-center">
+                <span className="ml-auto min-w-[20px] h-[20px] px-1.5 rounded-full bg-brand-pinkDark text-white text-[10px] font-black flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
@@ -652,6 +734,22 @@ export default function PublicProfileView({ profile, products, services, interac
           />
         </div>
       ) : (
+      <>
+      {/* ══ Hero Cinéma — plein écran, hors du conteneur centré ══ */}
+      {scrollHero && currentTab === 'shop' && activeProducts.length > 0 && (
+        <Suspense fallback={<div className="w-full" style={{ background: hero.style3d.stage, height: 'clamp(420px, 80vh, 900px)' }} />}>
+          <ProductHeroScroll
+            modelId={heroModelId}
+            style={hero.style3d}
+            lang={lang}
+            shopName={shopDisplayName}
+            ownerId={profile.user_id}
+            onCta={scrollToProducts}
+            products={activeProducts}
+            onOpenProduct={openProduct}
+          />
+        </Suspense>
+      )}
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 pt-6 pb-20 relative z-10">
 
         {/* ══ Bannière d'annonce (Feature 5) — tout en haut de l'onglet Boutique ══ */}
@@ -673,6 +771,32 @@ export default function PublicProfileView({ profile, products, services, interac
           </div>
         )}
 
+        {/* ══ Hero — 3D (option Premium) ou photos des produits, selon le thème ══ */}
+        {currentTab === 'shop' && activeProducts.length > 0 && (
+          scrollHero ? null : hero.mode === '3d' ? (
+            <Suspense fallback={<div className="w-full rounded-3xl mb-6" style={{ background: hero.style3d.stage, height: 'clamp(300px, 52vw, 420px)' }} />}>
+              <ProductHero3D
+                modelId={heroModelId}
+                style={hero.style3d}
+                lang={lang}
+                shopName={shopDisplayName}
+                ownerId={profile.user_id}
+              />
+            </Suspense>
+          ) : (
+            <ShopHero
+              style={heroStyleFor(themeId)}
+              shopName={shopDisplayName}
+              bio={profile.bio}
+              logoUrl={profile.shop_logo_url || profile.avatar_url}
+              products={activeProducts}
+              categories={distinctCategories}
+              lang={lang}
+              onCta={scrollToProducts}
+              onCategory={setActiveCategory}
+            />
+          )
+        )}
         {/* ══ Badges de confiance — calculés automatiquement depuis les stats du vendeur ══ */}
         {currentTab === 'shop' && computedBadges.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
@@ -687,67 +811,6 @@ export default function PublicProfileView({ profile, products, services, interac
                 {lang === 'fr' ? b.labelFr : b.labelEn}
               </span>
             ))}
-          </div>
-        )}
-
-        {/* ══ Bannière promotionnelle — thème Modern ══ */}
-        {profile.theme === 'modern' && currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className="mb-6 rounded-3xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg,#d4a574,#e8c99b,#f0dcc0)', minHeight: '140px' }}>
-            <div className="absolute right-0 top-0 w-1/2 h-full" style={{ background: 'radial-gradient(ellipse at 80% 50%,rgba(255,255,255,0.25),transparent 70%)' }} />
-            <div className="relative z-10 p-6 flex flex-col justify-center">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1">{lang === 'fr' ? 'Découvrez notre sélection' : 'Discover our selection'}</p>
-              <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">{shopDisplayName}</h2>
-              <p className="text-xs text-white/80 mt-1">{lang === 'fr' ? `${activeProducts.length} produits disponibles` : `${activeProducts.length} products available`}</p>
-            </div>
-          </div>
-        )}
-
-        {/* ══ Bannière "SHOP" — thème Coral (theme6) ══ */}
-        {profile.theme === 'coral' && currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className="mb-6 rounded-lg overflow-hidden relative flex" style={{ minHeight: '150px' }}>
-            <div className="w-2/5" style={{ background: '#f9c9b8' }} />
-            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6" style={{ background: '#f0f0f0' }}>
-              <h2 className="text-3xl sm:text-4xl font-black tracking-wider" style={{ color: '#2b2b2b' }}>SHOP</h2>
-              <p className="text-xs mt-2" style={{ color: '#8b8b8b' }}>
-                {lang === 'fr' ? `${shopDisplayName} • Tous les produits` : `${shopDisplayName} • All products`}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ══ Bannière promo — thème Tech (theme7 Boulanger style) ══ */}
-        {profile.theme === 'tech' && currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className="mb-6 rounded-3xl overflow-hidden relative flex flex-col sm:flex-row items-stretch" style={{ background: '#f0f7ff', minHeight: '160px' }}>
-            <div className="flex-1 p-5 sm:p-7 flex flex-col justify-center">
-              <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: '#0a67c2' }}>
-                {lang === 'fr' ? 'Offres du moment' : "Today's offers"}
-              </p>
-              <h2 className="text-2xl sm:text-3xl font-black leading-tight" style={{ color: '#0a67c2' }}>{shopDisplayName}</h2>
-              <p className="text-xs mt-1.5" style={{ color: '#0a67c2' }}>
-                {lang === 'fr' ? `${activeProducts.length} produits disponibles` : `${activeProducts.length} products available`}
-              </p>
-            </div>
-            <div className="hidden sm:block w-1/3 relative" style={{ background: '#0a67c2' }}>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-full h-full rounded-l-[80px]" style={{ background: '#0a67c2' }} />
-              </div>
-              <div className="absolute top-1/2 right-6 -translate-y-1/2 px-5 py-2.5 rounded-full font-bold text-sm shadow-lg" style={{ background: '#ffffff', color: '#e85a15' }}>
-                {lang === 'fr' ? 'Voir tout' : 'See all'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══ Bannière burgundy — thème Burgundy (theme8) ══ */}
-        {profile.theme === 'burgundy' && currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className="mb-6 rounded-lg overflow-hidden relative p-6 sm:p-8" style={{ background: 'linear-gradient(135deg,#7a1a29,#5a1220)', minHeight: '140px' }}>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-white/70 mb-1">
-              {lang === 'fr' ? 'Collection exclusive' : 'Exclusive collection'}
-            </p>
-            <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">{shopDisplayName}</h2>
-            <p className="text-xs text-white/80 mt-1.5 max-w-md">
-              {lang === 'fr' ? 'Découvrez notre sélection de produits soigneusement choisis.' : 'Discover our carefully curated product selection.'}
-            </p>
           </div>
         )}
 
@@ -823,18 +886,34 @@ export default function PublicProfileView({ profile, products, services, interac
           </div>
         )}
 
+        {/* Résultat de la recherche en direct (annoncé aux lecteurs d'écran) */}
+        {(currentTab === 'shop' || currentTab === 'services') && search.trim() && (() => {
+          const n = currentTab === 'shop' ? filteredProducts.length : filteredServices.length;
+          return (
+            <p role="status" aria-live="polite" className="mb-4 text-xs font-semibold" style={{ color: stSubtext }}>
+              {n === 0
+                ? (lang === 'fr' ? `Aucun résultat pour « ${search.trim()} »` : `No results for “${search.trim()}”`)
+                : (lang === 'fr' ? `${n} résultat${n > 1 ? 's' : ''} pour « ${search.trim()} »` : `${n} result${n > 1 ? 's' : ''} for “${search.trim()}”`)}
+              {' · '}
+              <button type="button" onClick={() => setSearch('')} className="underline underline-offset-2" style={{ color: serviceTheme.accent }}>
+                {lang === 'fr' ? 'Effacer' : 'Clear'}
+              </button>
+            </p>
+          );
+        })()}
+
         {/* Boutique produits */}
         {currentTab === 'shop' && activeProducts.length > 0 && (
-          <div className={`grid grid-cols-2 ${forceMobile ? '' : shopTheme.gridCols.replace(/^grid-cols-\d+\s*/, '')} gap-4`}>
+          <div id="shop-products" className={`grid grid-cols-2 ${forceMobile ? '' : shopTheme.gridCols.replace(/^grid-cols-\d+\s*/, '')} gap-4`}>
             {filteredProducts.map((product, i) => {
-              const isLuxury = profile.theme === 'luxury';
-              const isMarketplace = profile.theme === 'marketplace';
-              const isTech = profile.theme === 'tech';
-              const isCoral = profile.theme === 'coral';
-              const isModern = profile.theme === 'modern';
-              const isVintage = profile.theme === 'vintage';
-              const isBurgundy = profile.theme === 'burgundy';
-              const isElegance = profile.theme === 'elegance';
+              const isLuxury = themeId === 'luxury';
+              const isMarketplace = themeId === 'marketplace';
+              const isTech = themeId === 'tech';
+              const isCoral = themeId === 'coral';
+              const isModern = themeId === 'modern';
+              const isVintage = themeId === 'vintage';
+              const isBurgundy = themeId === 'burgundy';
+              const isElegance = themeId === 'elegance';
 
               // Marketplace: no card background/border, price on top-left
               if (isMarketplace) {
@@ -862,9 +941,8 @@ export default function PublicProfileView({ profile, products, services, interac
                         {product.price.toLocaleString()} {product.currency}
                       </p>
                       <p className="text-sm mt-0.5 line-clamp-1" style={{ color: stText }}>{product.name}</p>
-                      <p className="text-[11px] mt-0.5 line-clamp-2 min-h-[32px]" style={{ color: stSubtext }}>
-                        {product.description || product.location_address || (lang === 'fr' ? 'Boutique en ligne' : 'Online shop')}
-                      </p>
+                      <ProductBlurb text={product.description} fallback={product.location_address || (lang === 'fr' ? 'Boutique en ligne' : 'Online shop')}
+                        color={stSubtext} accent={serviceTheme.accent} moreLabel={moreLabel} />
                       <button
                         onClick={e => { e.stopPropagation(); addToCart(product); }}
                         disabled={product.quantity <= 0 || !interactive}
@@ -912,9 +990,10 @@ export default function PublicProfileView({ profile, products, services, interac
                     </div>
                     <div className="mt-4 flex-1 w-full flex flex-col items-center text-center">
                       <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: stText }}>{product.name}</h3>
-                      <p className="text-[10px] mt-1 line-clamp-2 min-h-[28px] max-w-[80%]" style={{ color: stSubtext }}>
-                        {product.description || (lang === 'fr' ? 'Aucune description.' : 'No description.')}
-                      </p>
+                      <div className="max-w-[88%]">
+                        <ProductBlurb text={product.description} fallback={lang === 'fr' ? 'Aucune description.' : 'No description.'}
+                          color={stSubtext} accent={serviceTheme.accent} align="center" moreLabel={moreLabel} />
+                      </div>
                       <div className="flex items-center gap-0.5 mt-2">
                         {[1, 2, 3, 4, 5].map(n => (
                           <Star key={n} size={9}
@@ -970,7 +1049,7 @@ export default function PublicProfileView({ profile, products, services, interac
                     style={{
                       background: isModern ? 'transparent'
                         : isVintage ? 'transparent'
-                        : themeDark ? '#1a1a2e' : '#f3f4f6',
+                        : themeDark ? BRAND.navy : '#f3f4f6',
                     }}>
                     {product.image_url ? (
                       <img src={product.image_url} alt={product.name}
@@ -1029,9 +1108,8 @@ export default function PublicProfileView({ profile, products, services, interac
                   <div className="p-3.5 flex-1 flex flex-col justify-between relative z-10">
                     <div>
                       <h3 className={`text-sm font-bold line-clamp-1 transition-colors ${isElegance ? 'text-center' : ''}`} style={{ color: stText }}>{product.name}</h3>
-                      <p className={`text-[11px] mt-1 line-clamp-2 leading-relaxed min-h-[32px] ${isElegance ? 'text-center' : ''}`} style={{ color: stSubtext }}>
-                        {product.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
-                      </p>
+                      <ProductBlurb text={product.description} fallback={lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.'}
+                        color={stSubtext} accent={serviceTheme.accent} align={isElegance ? 'center' : 'left'} moreLabel={moreLabel} />
                     </div>
                     <div className="mt-auto pt-3 flex flex-col gap-2">
                       <div className={`flex items-center gap-0.5 ${isElegance ? 'justify-center' : ''}`}>
@@ -1132,43 +1210,95 @@ export default function PublicProfileView({ profile, products, services, interac
           </div>
         )}
 
-        {/* Services — carte horizontale, l'absence de photo ne se remarque pas */}
+        {/* ════ Services — ruban sinusoïdal, même univers que le tableau de bord, aux couleurs du thème ════ */}
         {currentTab === 'services' && activeServices.length > 0 && (
-          <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">
-            {filteredServices.map(service => (
-              <div key={service.id}
-                className="group flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all duration-300 transform hover:-translate-y-0.5 shadow-sm hover:shadow-md"
-                style={cardBgStyle}>
-                <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 flex items-center justify-center bg-gradient-to-br from-pink-500 to-violet-500">
-                  {service.image_url ? (
-                    <img src={service.image_url} alt={service.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Briefcase size={20} className="text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold truncate" style={{ color: stText }}>{service.name}</h3>
-                    {service.duration && (
-                      <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-500">
-                        <Clock size={9} />{service.duration}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: stSubtext }}>
-                    {service.description || (lang === 'fr' ? 'Aucune description fournie.' : 'No description provided.')}
-                  </p>
-                  <span className="text-sm font-extrabold tracking-tight" style={{ color: shopTheme.priceColor }}>
-                    {service.price.toLocaleString()} <span className="text-[10px]">{service.currency}</span>
-                  </span>
-                </div>
+          <div className="w-full">
+            <div className="flex flex-col items-center text-center mb-6 gap-1">
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="inline-block w-8 h-px rounded-full" style={{ background: `linear-gradient(90deg,transparent,${shopTheme.accentColor ?? BRAND.pink})` }} />
+                <span className="text-[11px] font-black uppercase tracking-[0.22em]" style={{ color: shopTheme.accentColor ?? BRAND.pink }}>
+                  {lang === 'fr' ? 'Nos prestations' : 'Our services'}
+                </span>
+                <span className="inline-block w-8 h-px rounded-full" style={{ background: `linear-gradient(90deg,${shopTheme.accentColor ?? BRAND.pink},transparent)` }} />
               </div>
-            ))}
+              <p className="text-xs" style={{ color: stSubtext }}>
+                {filteredServices.length} {lang === 'fr'
+                  ? (filteredServices.length > 1 ? 'prestations disponibles' : 'prestation disponible')
+                  : (filteredServices.length > 1 ? 'services available' : 'service available')}
+              </p>
+            </div>
+            <PublicServiceWave
+              services={filteredServices}
+              lang={lang}
+              onOpen={setViewingService}
+              theme={serviceTheme}
+            />
           </div>
         )}
-
-        {/* Suivi de commande — liste à gauche, détail de la commande à droite */}
+        {/* Carte & suivi réunis : où trouver les produits, puis le suivi de ma commande */}
         {currentTab === 'tracking' && (
+          <div className="space-y-10">
+            {hasMapAccess && (
+              <section aria-labelledby="shop-map-title">
+                <div className="flex items-center gap-2 mb-1">
+                  <MapPin size={16} style={{ color: BRAND.violet }} />
+                  <h2 id="shop-map-title" className="text-base font-black" style={{ color: stText }}>
+                    {lang === 'fr' ? 'Où trouver les produits' : 'Where to find the products'}
+                  </h2>
+                </div>
+                <p className="text-xs mb-4" style={{ color: stSubtext }}>
+                  {lang === 'fr' ? 'Basculez entre vue simple et vue satellite.' : 'Switch between simple and satellite view.'}
+                </p>
+                <ProductsMap
+                  isDark={themeDark}
+                  height={420}
+                  lang={lang}
+                  routes={mapRoutes}
+                  selectedRouteId={openedRoute ? openedRoute.id : mapRouteId}
+                  onSelectRoute={setMapRouteId}
+                  pins={activeProducts
+                    .filter(p => p.location_lat != null && p.location_lng != null)
+                    .map(p => ({
+                      id: p.id, name: p.name, price: p.price, currency: p.currency,
+                      image_url: p.image_url, lat: p.location_lat as number, lng: p.location_lng as number,
+                    }))}
+                  emptyLabel={lang === 'fr' ? 'Aucun emplacement renseigné pour le moment.' : 'No location added yet.'}
+                  searchPlaceholder={lang === 'fr' ? 'Rechercher un produit...' : 'Search a product...'}
+                  noResultsLabel={lang === 'fr' ? 'Aucun produit trouvé.' : 'No product found.'}
+                />
+                {subDeliveries.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-bold mb-2" style={{ color: stText }}>
+                      {lang === 'fr' ? `Mes livraisons (${subDeliveries.length})` : `My deliveries (${subDeliveries.length})`}
+                    </p>
+                    <ul className="flex gap-2 overflow-x-auto pb-1" aria-label={lang === 'fr' ? 'Mes livraisons' : 'My deliveries'}>
+                      {subDeliveries.map(d => {
+                        const on = (openedRoute ? openedRoute.id : mapRouteId) === d.id;
+                        return (
+                          <li key={d.id} className="shrink-0">
+                            <button type="button" aria-pressed={on} onClick={() => { setMapRouteId(on ? null : d.id); setSelectedOrderId(d.id); }}
+                              className="flex items-center gap-2 rounded-full pl-1 pr-3 py-1 text-xs font-bold transition"
+                              style={{ background: on ? serviceTheme.accent : stCardBg, color: on ? '#fff' : stText, border: `1px solid ${on ? 'transparent' : stCardBorder}` }}>
+                              <span className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.08)' }}>
+                                {d.productImage ? <img src={d.productImage} alt="" className="w-full h-full object-cover" /> : <Truck size={13} />}
+                              </span>
+                              <span className="max-w-[140px] truncate">{d.productName || (lang === 'fr' ? 'Commande' : 'Order')}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+            <section aria-labelledby="order-lookup-title">
+              <div className="flex items-center gap-2 mb-4">
+                <PackageSearch size={16} style={{ color: BRAND.violet }} />
+                <h2 id="order-lookup-title" className="text-base font-black" style={{ color: stText }}>
+                  {lang === 'fr' ? 'Suivre ma commande' : 'Track my order'}
+                </h2>
+              </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6">
 
             {/* ══ Colonne gauche — recherche + liste des commandes ══ */}
@@ -1243,7 +1373,7 @@ export default function PublicProfileView({ profile, products, services, interac
                   {trackingOrders.map(order => {
                     const statusMeta = {
                       pending:   { label: lang === 'fr' ? "En attente d'envoi" : 'Awaiting shipment', color: '#f59e0b', icon: Package },
-                      shipped:   { label: lang === 'fr' ? 'Expédiée' : 'Shipped', color: '#6C63FF', icon: Truck },
+                      shipped:   { label: lang === 'fr' ? 'Expédiée' : 'Shipped', color: BRAND.violet, icon: Truck },
                       completed: { label: lang === 'fr' ? 'Livrée · payée' : 'Delivered · paid', color: '#22c55e', icon: CheckCircle2 },
                       cancelled: { label: lang === 'fr' ? 'Annulée' : 'Cancelled', color: '#ef4444', icon: X },
                     }[order.status] ?? { label: order.status, color: '#9ca3af', icon: Package };
@@ -1257,12 +1387,15 @@ export default function PublicProfileView({ profile, products, services, interac
                           borderColor: active ? shopTheme.priceColor : stCardBorder,
                         }}>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${statusMeta.color}1f` }}>
-                              <StatusIcon size={15} color={statusMeta.color} />
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: `${statusMeta.color}1f` }}>
+                              {order.product_image
+                                ? <img src={order.product_image} alt="" loading="lazy" className="w-full h-full object-cover" />
+                                : <StatusIcon size={16} color={statusMeta.color} />}
                             </div>
                             <div>
-                              <p className="text-sm font-bold" style={{ color: stText }}>{order.amount.toLocaleString()} {order.currency}</p>
+                              <p className="text-sm font-bold line-clamp-1" style={{ color: stText }}>{order.product_name ?? (lang === 'fr' ? 'Commande' : 'Order')}</p>
+                              <p className="text-xs" style={{ color: stSubtext }}>{order.amount.toLocaleString()} {order.currency}</p>
                               <p className="text-xs font-semibold" style={{ color: statusMeta.color }}>{statusMeta.label}</p>
                             </div>
                           </div>
@@ -1275,9 +1408,9 @@ export default function PublicProfileView({ profile, products, services, interac
               )}
             </div>
 
-            {/* ══ Colonne droite — détail de la commande sélectionnée ══ */}
+            {/* ══ Colonne droite — la commande en entier : produit, suivi et carte ══ */}
             <div>
-              {!selectedOrder ? (
+              {!selectedOrderId ? (
                 <div className="h-full flex items-center justify-center text-center py-16 rounded-2xl border border-dashed" style={{ borderColor: stCardBorder }}>
                   <div>
                     <PackageSearch size={28} className="mx-auto mb-2" style={{ color: stSubtext }} />
@@ -1286,113 +1419,31 @@ export default function PublicProfileView({ profile, products, services, interac
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-2xl border p-5" style={{ borderColor: stCardBorder, background: stCardBg }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: stSubtext }}>{lang === 'fr' ? 'Suivi de commande' : 'Order tracking'}</p>
-                  <h3 className="text-lg font-black mb-4" style={{ color: stText }}>{selectedOrder.amount.toLocaleString()} {selectedOrder.currency}</h3>
-
-                  {/* Étapes */}
-                  <div className="flex items-center justify-between mb-6">
-                    {(['pending', 'shipped', 'completed'] as const).map((step, i, arr) => {
-                      const stepIndex = ['pending', 'shipped', 'completed'].indexOf(selectedOrder.status);
-                      const currentStep = stepIndex === -1 ? 0 : stepIndex;
-                      const StepIcon = step === 'pending' ? Package : step === 'shipped' ? Truck : CheckCircle2;
-                      return (
-                        <React.Fragment key={step}>
-                          <div className="flex flex-col items-center gap-1.5">
-                            <div className="w-9 h-9 rounded-full flex items-center justify-center"
-                              style={{
-                                background: i <= currentStep ? shopTheme.buttonGradient : (themeDark ? '#191938' : '#f3f4f6'),
-                                color: i <= currentStep ? '#fff' : stSubtext,
-                              }}>
-                              <StepIcon size={15} />
-                            </div>
-                            <span className="text-[10px] font-semibold text-center max-w-[64px]" style={{ color: stSubtext }}>
-                              {step === 'pending' ? (lang === 'fr' ? 'Paiement reçu' : 'Payment received')
-                                : step === 'shipped' ? (lang === 'fr' ? 'Expédiée' : 'Shipped')
-                                : (lang === 'fr' ? 'Livrée' : 'Delivered')}
-                            </span>
-                          </div>
-                          {i < arr.length - 1 && (
-                            <div className="flex-1 h-0.5 mx-1" style={{ background: i < currentStep ? '#6C63FF' : (themeDark ? '#191938' : '#e5e7eb') }} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
-
-                  {selectedOrder.status === 'completed' ? (
-                    <div className="rounded-2xl p-4 flex items-start gap-2.5" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                      <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
-                      <p className="text-emerald-500 text-xs leading-relaxed">
-                        {lang === 'fr'
-                          ? 'Commande confirmée comme livrée. Le vendeur a été payé. Merci !'
-                          : 'Order confirmed as delivered. The seller has been paid. Thank you!'}
-                      </p>
-                    </div>
-                  ) : selectedOrder.status === 'cancelled' ? (
-                    <div className="rounded-2xl p-4 flex items-start gap-2.5" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                      <X size={18} className="text-red-500 shrink-0 mt-0.5" />
-                      <p className="text-red-500 text-xs leading-relaxed">
-                        {lang === 'fr' ? 'Cette commande a été annulée par le vendeur.' : 'This order was cancelled by the seller.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="rounded-2xl p-4 mb-4 flex items-start gap-2.5" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
-                        <ShieldCheck size={18} className="text-blue-500 shrink-0 mt-0.5" />
-                        <p className="text-blue-500 text-xs leading-relaxed">
-                          {lang === 'fr'
-                            ? "Votre argent reste protégé jusqu'à ce que vous confirmiez avoir bien reçu votre colis."
-                            : "Your money stays protected until you confirm you've received your package."}
-                        </p>
-                      </div>
-                      <button onClick={confirmOrderDelivery} disabled={confirmingDelivery}
-                        className="w-full text-white font-bold py-3 rounded-2xl transition disabled:opacity-50 flex items-center justify-center gap-2"
-                        style={{ background: shopTheme.buttonGradient }}>
-                        {confirmingDelivery
-                          ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          : <CheckCircle2 size={16} />}
-                        {lang === 'fr' ? "J'ai bien reçu ma commande" : "I've received my order"}
-                      </button>
-                    </>
-                  )}
+              ) : orderLoading ? (
+                <div className="flex items-center justify-center py-20" role="status" aria-label={lang === 'fr' ? 'Chargement' : 'Loading'}>
+                  <Loader2 size={24} className="animate-spin" style={{ color: stSubtext }} />
                 </div>
+              ) : orderDetails ? (
+                <OrderDetailsCard details={orderDetails} lang={lang} theme={serviceTheme} onConfirm={confirmOrderDelivery} />
+              ) : (
+                <p className="text-sm text-center py-16" style={{ color: stSubtext }}>{lang === 'fr' ? 'Commande introuvable.' : 'Order not found.'}</p>
               )}
             </div>
           </div>
-        )}
-
-        {/* Carte — emplacement des produits, réservée aux vendeurs Business/Premium */}
-        {currentTab === 'map' && (
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <MapPin size={16} style={{ color: '#6C63FF' }} />
-              <h2 className="text-base font-black" style={{ color: stText }}>
-                {lang === 'fr' ? 'Où trouver les produits' : 'Where to find the products'}
-              </h2>
-            </div>
-            <p className="text-xs mb-4" style={{ color: stSubtext }}>
-              {lang === 'fr'
-                ? 'Basculez entre vue simple et vue satellite.'
-                : 'Switch between simple and satellite view.'}
-            </p>
-            <ProductsMap
-              isDark={themeDark}
-              height={460}
-              pins={activeProducts
-                .filter(p => p.location_lat != null && p.location_lng != null)
-                .map(p => ({
-                  id: p.id, name: p.name, price: p.price, currency: p.currency,
-                  image_url: p.image_url, lat: p.location_lat as number, lng: p.location_lng as number,
-                }))}
-              emptyLabel={lang === 'fr' ? 'Aucun emplacement renseigné pour le moment.' : 'No location added yet.'}
-              searchPlaceholder={lang === 'fr' ? 'Rechercher un produit...' : 'Search a product...'}
-              noResultsLabel={lang === 'fr' ? 'Aucun produit trouvé.' : 'No product found.'}
-            />
+            </section>
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {viewingService && (
+        <ServiceDetailModal
+          service={viewingService}
+          profile={profile}
+          theme={serviceTheme}
+          onClose={() => setViewingService(null)}
+        />
       )}
 
       {/* ══ Toast ventes en direct (Feature 3) — uniquement onglet Boutique et interactive ══ */}
@@ -1404,10 +1455,18 @@ export default function PublicProfileView({ profile, products, services, interac
         />
       )}
 
+      {/* Suivre la boutique : e-mail pour être prévenu des nouveautés (bouton « S'abonner » de la barre de navigation) */}
+      {subscribeOpen && profile.username && (
+        <Modal onClose={() => setSubscribeOpen(false)} closeOnBackdrop>
+          <div className="w-full max-w-[460px] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-[2rem]">
+            <SubscribeBox username={profile.username} shopName={shopDisplayName} lang={lang} theme={serviceTheme} interactive={interactive} onClose={() => setSubscribeOpen(false)} />
+          </div>
+        </Modal>
+      )}
       {/* Badge WhiteDuckSaaS */}
       {showBadge && (
         <div className="flex justify-center pb-6 pt-4 relative z-10">
-          <a href={interactive ? window.location.origin : undefined}
+          <a href={interactive ? `${window.location.origin}/${profile.referral_code ? `?ref=${encodeURIComponent(profile.referral_code)}` : ''}` : undefined}
             className="flex items-center gap-2 bg-gray-900/90 backdrop-blur-md text-white text-xs px-5 py-2.5 rounded-full shadow-2xl border border-white/10 hover:border-blue-500/50 hover:bg-gray-800 transition duration-300">
             <div className="w-5 h-5 bg-blue-600 rounded-lg flex items-center justify-center">
               <Link2 size={10} className="text-white" />

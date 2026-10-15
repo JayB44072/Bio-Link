@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { supabase } from '../../lib/supabase';
-import { Transaction } from '../../lib/types';
+import { lookupOrders, type OrderSummary } from '../../lib/api/orders';
 import { Link2, Search, Package, Truck, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { BRAND, GRADIENTS } from '../../lib/theme';
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ComponentType<{ size?: number; className?: string }> }> = {
   pending:   { label: 'En attente d\'envoi', color: '#f59e0b', icon: Package },
-  shipped:   { label: 'Expédiée',            color: '#6C63FF', icon: Truck },
+  shipped:   { label: 'Expédiée',            color: BRAND.violet, icon: Truck },
   completed: { label: 'Livrée · payée',      color: '#22c55e', icon: CheckCircle2 },
   cancelled: { label: 'Annulée',             color: '#ef4444', icon: XCircle },
 };
 
 export default function OrderLookupPage() {
   const [phone, setPhone] = useState('');
-  const [orders, setOrders] = useState<Transaction[] | null>(null);
+  const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
@@ -21,12 +21,7 @@ export default function OrderLookupPage() {
     if (!phone.trim()) return;
     setLoading(true);
     setSearched(true);
-    const { data } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('buyer_phone', phone.trim())
-      .order('created_at', { ascending: false });
-    setOrders((data as Transaction[]) || []);
+    setOrders(await lookupOrders({ phone: phone.trim() }));
     setLoading(false);
   }
 
@@ -51,7 +46,7 @@ export default function OrderLookupPage() {
             />
             <button type="submit" disabled={loading}
               className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+              style={{ background: GRADIENTS.brand }}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
             </button>
           </form>
@@ -74,12 +69,15 @@ export default function OrderLookupPage() {
                   className="block bg-white rounded-2xl shadow-sm border border-gray-100 p-4 hover:border-gray-200 transition">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
                         style={{ background: `${meta.color}1f` }}>
-                        <Icon size={15} color={meta.color} />
+                        {order.product_image
+                          ? <img src={order.product_image} alt="" loading="lazy" className="w-full h-full object-cover" />
+                          : <Icon size={16} color={meta.color} />}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-gray-900">{order.amount.toLocaleString()} {order.currency}</p>
+                        <p className="text-sm font-bold text-gray-900 line-clamp-1">{order.product_name ?? 'Commande'}</p>
+                        <p className="text-xs text-gray-500">{order.amount.toLocaleString()} {order.currency}</p>
                         <p className="text-xs" style={{ color: meta.color }}>{meta.label}</p>
                       </div>
                     </div>

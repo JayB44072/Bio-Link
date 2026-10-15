@@ -1,0 +1,26 @@
+# Rappel hebdomadaire aux vendeurs inactifs (gratuit : GitHub Actions).
+# Appelle la fonction Supabase `platform-emails` tous les lundis à 09:00 UTC.
+# Secrets à créer dans GitHub (Settings → Secrets and variables → Actions) :
+#   PLATFORM_EMAILS_URL  = https://<projet>.supabase.co/functions/v1/platform-emails
+#   CRON_SECRET          = la même valeur que le secret Supabase CRON_SECRET
+name: Rappel hebdomadaire aux vendeurs
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  rappel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler platform-emails
+        env:
+          URL: ${{ secrets.PLATFORM_EMAILS_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$URL" && test -n "$SECRET"
+          curl -fsS -X POST "$URL" \
+            -H "x-cron-secret: $SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"mode":"weekly"}'

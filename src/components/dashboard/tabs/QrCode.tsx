@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Profile } from '../../../lib/types';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
+import { BRAND, GRADIENTS } from '../../../lib/theme';
+import { dashPalette } from '../../../lib/dashPalette';
 import {
   Download, QrCode as QrCodeIcon, Sparkles, Printer, Palette, Link as LinkIcon,
   Check, Copy, FileImage,
@@ -165,11 +167,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
   const tt = L[langKey];
 
   /* ── Theme tokens ── */
-  const surface    = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt = dk ? '#191938' : '#faf9ff';
-  const border     = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim    = dk ? '#f2f1ff' : '#16162e';
-  const txtSub     = dk ? '#8c8ab0' : '#8a87a3';
+  const { surface, surfaceAlt, border, txtPrim, txtSub } = dashPalette(dk);
   const cardShadow = dk ? 'none' : '0 6px 24px rgba(108,99,255,0.08)';
 
   const publicUrl = useMemo(
@@ -180,7 +178,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
   const shopName = profile.shop_name || profile.display_name || profile.username;
   const logoUrl = profile.shop_logo_url || '/logo.png';
 
-  const [brandColor, setBrandColor] = useState<string>('#6C63FF');
+  const [brandColor, setBrandColor] = useState<string>(BRAND.violet);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [busy, setBusy] = useState<'simple' | 'branded' | 'poster' | null>(null);
   const [copied, setCopied] = useState(false);
@@ -268,7 +266,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
     } catch { /* ignore */ }
   }
 
-  const PALETTE = ['#6C63FF', '#FF6B9D', '#00C2FF', '#22c55e', '#f59e0b', '#000000'];
+  const PALETTE = [BRAND.violet, BRAND.pink, BRAND.cyan, '#22c55e', '#f59e0b', '#000000'];
 
   return (
     <div className="space-y-6">
@@ -323,7 +321,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
             onClick={copyUrl}
             className="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
             style={{
-              background: copied ? 'linear-gradient(135deg,#22c55e,#16a34a)' : 'linear-gradient(135deg,#6C63FF,#8B7CFF)',
+              background: copied ? 'linear-gradient(135deg,#22c55e,#16a34a)' : GRADIENTS.violetSoft,
               color: '#fff',
               boxShadow: '0 4px 14px rgba(108,99,255,0.35)',
             }}
@@ -412,7 +410,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
 
             <DownloadRow
               icon={<FileImage size={16} />}
-              iconBg="linear-gradient(135deg,#00C2FF,#6C63FF)"
+              iconBg={GRADIENTS.brandReverse}
               title={tt.simple}
               subtitle={tt.simpleSub}
               sizeKB={sizes.simple}
@@ -426,7 +424,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
             />
             <DownloadRow
               icon={<QrCodeIcon size={16} />}
-              iconBg="linear-gradient(135deg,#6C63FF,#FF6B9D)"
+              iconBg={GRADIENTS.violetPink}
               title={tt.branded}
               subtitle={tt.brandedSub}
               sizeKB={sizes.branded}
@@ -511,7 +509,7 @@ function DownloadRow(props: {
         disabled={busy}
         className="px-3.5 py-2 rounded-xl text-[11.5px] font-bold flex items-center gap-1.5 transition-all disabled:opacity-60"
         style={{
-          background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)',
+          background: GRADIENTS.violetSoft,
           color: '#fff',
           boxShadow: '0 4px 12px rgba(108,99,255,0.3)',
         }}

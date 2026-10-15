@@ -1,10 +1,18 @@
+# Render : « Web Service » gratuit (et non plus site statique) pour que les liens de boutique partagés sur WhatsApp,
+# Facebook ou Google affichent le nom, la photo et la description de la boutique (voir server/index.ts).
+# Le rappel hebdomadaire est planifié gratuitement par GitHub Actions (.github/workflows/rappel-hebdo.yml).
 services:
   - type: web
     name: biolinkwd
-    env: static
-    buildCommand: npm run build
-    staticPublishPath: ./dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false

@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, lazy, Suspense } from 'react';
 import { Profile, Product, Service } from '../../../lib/types';
 import { PLAN_CONFIGS, THEMES, SHOP_THEMES } from '../../../lib/planLimits';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
 import PublicProfileView from '../../public/PublicProfileView';
-import { Lock, Crown, Check, Palette, Link2 } from 'lucide-react';
+import { Lock, Crown, Palette, Link2 } from 'lucide-react';
+import { dashPalette } from '../../../lib/dashPalette';
+import Modal from '../../ui/Modal';
+import ThemeCard from './themes/ThemeCard';
+import Segmented from '../../ui/Segmented';
+import { deriveHero3DStyle, formatThemeValue, parseThemeValue } from '../../../lib/shopTheme';
+
+// Le sélecteur embarque three.js : chargé seulement quand un thème avec héros 3D est choisi
+const HeroProductPicker = lazy(() => import('./themes/HeroProductPicker'));
 
 interface ThemesProps {
   profile: Profile;
@@ -18,7 +26,12 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
   const { t, lang } = useLang();
   const { isDark: dk } = useAppPrefs();
 
-  const [selectedTheme, setSelectedTheme] = useState<string>(profile.theme || 'default');
+  const saved = parseThemeValue(profile.theme);
+  const [selectedTheme, setSelectedTheme] = useState<string>(saved.themeId);
+  const [selectedModel, setSelectedModel] = useState<string | null>(saved.modelId);
+  const [use3d, setUse3d] = useState<boolean>(saved.use3d);
+  // Animation 3D : au défilement par défaut ; la boucle automatique reste le choix d'un réglage déjà enregistré
+  const [scrollMode, setScrollMode] = useState<boolean>(saved.scroll || !(saved.use3d || SHOP_THEMES[saved.themeId]?.hero3d));
   const [saving, setSaving] = useState(false);
   const [premiumModalOpen, setPremiumModalOpen] = useState(false);
   const [attemptedPremiumTheme, setAttemptedPremiumTheme] = useState('');
@@ -27,12 +40,23 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
   const canCustomizeTheme = plan.custom_themes;
 
   /* ── Theme tokens ── */
-  const surface    = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt = dk ? '#191938' : '#faf9ff';
-  const border     = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim    = dk ? '#f2f1ff' : '#16162e';
-  const txtLabel   = dk ? '#c7c5e8' : '#2d2b45';
-  const txtSub     = dk ? '#8c8ab0' : '#8a87a3';
+  const { surface, surfaceAlt, border, txtPrim, txtLabel, txtSub } = dashPalette(dk);
+
+  /** Enregistre le thème (et le héros 3D) dans profiles.theme, pour les forfaits qui personnalisent le thème. */
+  async function persist(themeId: string, modelId: string | null, with3d = use3d, withScroll = scrollMode) {
+    const theme = THEMES.find(th => th.id === themeId);
+    // Les forfaits sans personnalisation peuvent seulement prévisualiser les thèmes non gratuits
+    if (!canCustomizeTheme && !theme?.free) return;
+    const active3d = with3d || !!SHOP_THEMES[themeId]?.hero3d;
+    const value = formatThemeValue(themeId, modelId, with3d, active3d && withScroll);
+    setSaving(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ theme: value, updated_at: new Date().toISOString() })
+      .eq('user_id', profile.user_id);
+    setSaving(false);
+    if (!error) onUpdate({ theme: value });
+  }
 
   async function handleThemeSelect(themeId: string) {
     const theme = THEMES.find(th => th.id === themeId);
@@ -41,27 +65,47 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
       setPremiumModalOpen(true);
       return;
     }
-    // Free users can preview themes but cannot save any non-free theme
     setSelectedTheme(themeId);
-
-    // Only persist if user has permission (starter+) OR it's the free default theme
-    if (!canCustomizeTheme && !theme?.free) {
-      // preview-only for free users on non-free themes
-      return;
-    }
-
-    setSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ theme: themeId, updated_at: new Date().toISOString() })
-      .eq('user_id', profile.user_id);
-    setSaving(false);
-    if (!error) {
-      onUpdate({ theme: themeId });
-    }
+    await persist(themeId, selectedModel);
   }
 
-  const previewProfile = { ...profile, theme: selectedTheme };
+  async function handleModelSelect(modelId: string | null) {
+    setSelectedModel(modelId);
+    await persist(selectedTheme, modelId);
+  }
+
+  /** Les thèmes Showroom ont la 3D d'office ; sur les autres c'est une option Premium. */
+  const themeHas3d = !!SHOP_THEMES[selectedTheme]?.hero3d;
+  const show3dPicker = themeHas3d || use3d;
+  const pickerAccent = SHOP_THEMES[selectedTheme]?.hero3d?.accent ?? deriveHero3DStyle(SHOP_THEMES[selectedTheme] ?? SHOP_THEMES.default).accent;
+
+  async function handle3dToggle() {
+    if (profile.plan_type !== 'premium') {
+      setAttemptedPremiumTheme('__hero3d');
+      setPremiumModalOpen(true);
+      return;
+    }
+    const next = !use3d;
+    setUse3d(next);
+    await persist(selectedTheme, selectedModel, next);
+  }
+
+  // Textes des produits actifs, pour l'option « Auto » du sélecteur
+  const heroHints = useMemo(
+    () => products.filter(p => p.is_active).slice(0, 12).flatMap(p => [p.name, p.category ?? '']),
+    [products],
+  );
+  async function handleScrollMode(next: boolean) {
+    setScrollMode(next);
+    await persist(selectedTheme, selectedModel, use3d, next);
+  }
+
+  const heroImages = useMemo(
+    () => products.filter(p => p.is_active && p.image_url).slice(0, 5).map(p => p.image_url),
+    [products],
+  );
+
+  const previewProfile = { ...profile, theme: formatThemeValue(selectedTheme, selectedModel, use3d, show3dPicker && scrollMode) };
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
@@ -105,65 +149,79 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
           <label className="block text-sm font-semibold mb-3" style={{ color: txtLabel }}>
             {t.theme}
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {THEMES.map(theme => {
-              const isPremiumTheme = theme.premium;
-              const disabled = isPremiumTheme && profile.plan_type !== 'premium';
-              const selected = selectedTheme === theme.id;
-              const shopCfg = SHOP_THEMES[theme.id];
-              return (
-                <button
-                  key={theme.id}
-                  onClick={() => handleThemeSelect(theme.id)}
-                  disabled={disabled}
-                  className={`group relative rounded-2xl overflow-hidden transition-all duration-200 ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
-                  style={{
-                    border: `2px solid ${selected ? '#a855f7' : (dk ? 'rgba(255,255,255,0.08)' : '#eeecfb')}`,
-                    background: surface,
-                    boxShadow: selected ? '0 6px 18px rgba(168,85,247,0.25)' : 'none',
-                  }}
-                  title={isPremiumTheme ? 'Premium uniquement' : ''}
-                >
-                  <div className={`h-14 w-full relative ${theme.bg}`}>
-                    {isPremiumTheme && (
-                      <>
-                        <div className="absolute inset-0 bg-black/25" />
-                        <div className="absolute top-1.5 left-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full shadow-md"
-                          style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}>
-                          <Crown size={9} className="text-white" strokeWidth={2.5} />
-                          <span className="text-[8px] font-black text-white uppercase tracking-wider">Premium</span>
-                        </div>
-                      </>
-                    )}
-                    {selected && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
-                        style={{ background: '#a855f7' }}>
-                        <Check size={11} className="text-white" strokeWidth={3} />
-                      </div>
-                    )}
-                    {shopCfg && shopCfg !== SHOP_THEMES.default && (
-                      <div className="absolute bottom-1.5 left-1.5 flex gap-1">
-                        {[shopCfg.pageBg, shopCfg.priceColor, shopCfg.cardBg].map((c, ci) => (
-                          <div key={ci} className="w-3 h-3 rounded-full border border-white/30" style={{ background: c }} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="py-2 px-1 flex items-center justify-center gap-1.5">
-                    <span className="text-xs font-semibold" style={{ color: selected ? '#a855f7' : txtPrim }}>
-                      {theme.label[lang as 'fr' | 'en']}
-                    </span>
-                    {profile.theme === theme.id && (
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                        style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>
-                        {lang === 'fr' ? 'ACTUEL' : 'CURRENT'}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+          <div role="radiogroup" aria-label={t.theme} className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {THEMES.map(theme => (
+              <ThemeCard
+                key={theme.id}
+                label={theme.label[lang as 'fr' | 'en']}
+                config={SHOP_THEMES[theme.id] ?? SHOP_THEMES.default}
+                dark={dk}
+                selected={selectedTheme === theme.id}
+                current={saved.themeId === theme.id}
+                locked={theme.premium && profile.plan_type !== 'premium'}
+                currentLabel={lang === 'fr' ? 'ACTUEL' : 'CURRENT'}
+                premiumLabel="Premium"
+                onSelect={() => handleThemeSelect(theme.id)}
+                txtPrim={txtPrim}
+                border={dk ? 'rgba(255,255,255,0.08)' : '#eeecfb'}
+                surface={surface}
+              />
+            ))}
           </div>
+
+          {!themeHas3d && (
+            <button type="button" role="switch" aria-checked={use3d} onClick={handle3dToggle}
+              className="mt-4 w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7]"
+              style={{ background: surface, border: `1px solid ${use3d ? '#a855f7' : border}` }}>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-2 text-sm font-bold" style={{ color: txtPrim }}>
+                  {lang === 'fr' ? 'Héros 3D' : '3D hero'}
+                  <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ background: 'linear-gradient(135deg,#f59e0b,#f97316)' }}>
+                    <Crown size={9} className="text-white" strokeWidth={2.5} />
+                    <span className="text-[8px] font-black text-white uppercase tracking-wider">Premium</span>
+                  </span>
+                </span>
+                <span className="block text-xs mt-0.5" style={{ color: txtSub }}>
+                  {lang === 'fr' ? 'Un produit 3D qui se décompose en pièces, à la place des photos.' : 'A 3D product that breaks into parts, instead of photos.'}
+                </span>
+              </span>
+              <span className="relative w-11 h-6 rounded-full shrink-0 transition-colors" style={{ background: use3d ? '#a855f7' : (dk ? 'rgba(255,255,255,0.18)' : '#d4d4dc') }}>
+                <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all" style={{ left: use3d ? 22 : 2 }} />
+              </span>
+            </button>
+          )}
+
+          {show3dPicker && SHOP_THEMES[selectedTheme]?.heroMode !== 'scroll' && (
+            <div className="mt-4">
+              <Segmented
+                label={lang === 'fr' ? 'Animation du héros 3D' : '3D hero animation'}
+                value={scrollMode ? 'scroll' : 'loop'}
+                onChange={v => handleScrollMode(v === 'scroll')}
+                options={[
+                  { value: 'scroll', label: lang === 'fr' ? 'Au défilement' : 'On scroll', hint: lang === 'fr' ? 'Le visiteur fait défiler : le produit s’éclate (comme au cinéma)' : 'The visitor scrolls: the product breaks apart (cinematic)' },
+                  { value: 'loop', label: lang === 'fr' ? 'Boucle automatique' : 'Auto loop', hint: lang === 'fr' ? 'Le produit s’anime tout seul, en continu' : 'The product animates on its own, continuously' },
+                ]}
+                accent="#a855f7" txtPrim={txtPrim} txtSub={txtSub} border={border} surface={surface}
+              />
+            </div>
+          )}
+
+          {show3dPicker && (
+            <div className="mt-5">
+              <Suspense fallback={<div className="h-40 rounded-2xl animate-pulse" style={{ background: surface }} />}>
+                <HeroProductPicker
+                  value={selectedModel}
+                  hints={heroHints}
+                  accent={pickerAccent}
+                  ownerId={profile.user_id}
+                  productImages={heroImages}
+                  lang={lang}
+                  dark={dk}
+                  onChange={handleModelSelect}
+                />
+              </Suspense>
+            </div>
+          )}
 
           {saving && (
             <p className="text-xs mt-3 flex items-center gap-2" style={{ color: txtSub }}>
@@ -184,7 +242,7 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
 
         {/* Desktop: phone frame */}
         <div className="hidden md:flex justify-center">
-          <div className="relative w-[375px] h-[700px] bg-gray-900 rounded-[2.5rem] border-[6px] border-gray-800 shadow-2xl overflow-hidden shrink-0">
+          <div className="relative w-[300px] h-[min(700px,calc(100vh-10rem))] min-h-[460px] bg-gray-900 rounded-[2.5rem] border-[6px] border-gray-800 shadow-2xl overflow-hidden shrink-0">
             <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-16 h-4 bg-gray-800 rounded-full z-20" />
             <div className="w-full h-full overflow-y-auto scrollbar-hide">
               <PublicProfileView profile={previewProfile} products={products} services={services} interactive={false} previewMode="mobile" />
@@ -202,16 +260,20 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
 
       {/* Premium modal */}
       {premiumModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <Modal onClose={() => setPremiumModalOpen(false)} dim={60}>
           <div className="rounded-2xl p-8 max-w-sm text-center shadow-2xl" style={{ background: surface, border: '1px solid rgba(251,191,36,0.3)' }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(251,191,36,0.15)' }}>
               <Crown size={24} className="text-yellow-400" />
             </div>
-            <h3 className="font-bold text-lg mb-2" style={{ color: txtPrim }}>{lang === 'fr' ? 'Thème Premium' : 'Premium Theme'}</h3>
+            <h3 className="font-bold text-lg mb-2" style={{ color: txtPrim }}>{attemptedPremiumTheme === '__hero3d' ? (lang === 'fr' ? 'Héros 3D Premium' : 'Premium 3D hero') : (lang === 'fr' ? 'Thème Premium' : 'Premium Theme')}</h3>
             <p className="text-sm leading-relaxed mb-6" style={{ color: txtSub }}>
-              {lang === 'fr'
-                ? `Le thème "${THEMES.find(th => th.id === attemptedPremiumTheme)?.label.fr}" est réservé aux forfaits Premium. Passez à la version Premium pour l'activer.`
-                : `The "${THEMES.find(th => th.id === attemptedPremiumTheme)?.label.en}" theme is reserved for Premium plans. Upgrade to Premium to activate it.`}
+              {attemptedPremiumTheme === '__hero3d'
+                ? (lang === 'fr'
+                  ? "Le héros 3D est réservé aux forfaits Premium. Passez à la version Premium pour l'activer sur votre boutique."
+                  : 'The 3D hero is reserved for Premium plans. Upgrade to Premium to enable it on your shop.')
+                : lang === 'fr'
+                  ? `Le thème "${THEMES.find(th => th.id === attemptedPremiumTheme)?.label.fr}" est réservé aux forfaits Premium. Passez à la version Premium pour l'activer.`
+                  : `The "${THEMES.find(th => th.id === attemptedPremiumTheme)?.label.en}" theme is reserved for Premium plans. Upgrade to Premium to enable it.`}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setPremiumModalOpen(false)}
@@ -229,7 +291,7 @@ export default function Themes({ profile, products, services, onUpdate }: Themes
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

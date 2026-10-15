@@ -3,6 +3,9 @@ import { Profile, Transaction, WithdrawalRequest } from '../../../lib/types';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
+import { BRAND, GRADIENTS } from '../../../lib/theme';
+import { dashPalette } from '../../../lib/dashPalette';
+import { ButtonSpinner, CenteredSpinner } from '../../ui/Spinner';
 import {
   Wallet as WalletIcon, ArrowDownCircle, Smartphone, CreditCard, Clock, CheckCircle, Zap, AlertCircle,
   Sparkles, Truck, Package, Check, Settings,
@@ -15,10 +18,10 @@ interface WalletProps {
 
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
   completed:  { bg: 'rgba(34,197,94,0.12)',  text: '#22c55e' },
-  processing: { bg: 'rgba(108,99,255,0.12)', text: '#6C63FF' },
+  processing: { bg: 'rgba(108,99,255,0.12)', text: BRAND.violet },
   rejected:   { bg: 'rgba(239,68,68,0.12)',  text: '#ef4444' },
   pending:    { bg: 'rgba(251,191,36,0.12)', text: '#f59e0b' },
-  shipped:    { bg: 'rgba(108,99,255,0.12)', text: '#6C63FF' },
+  shipped:    { bg: 'rgba(108,99,255,0.12)', text: BRAND.violet },
 };
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -52,17 +55,9 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
   const isPremium = profile.plan_type === 'premium';
 
   /* ── Theme tokens ── */
-  const surface     = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt  = dk ? '#191938' : '#faf9ff';
-  const border      = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim     = dk ? '#f2f1ff' : '#16162e';
-  const txtLabel    = dk ? '#c7c5e8' : '#2d2b45';
-  const txtSub      = dk ? '#8c8ab0' : '#8a87a3';
-  const inputBg     = dk ? '#0d0d22' : '#faf9ff';
-  const inputBorder = dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
+  const { surface, surfaceAlt, border, txtPrim, txtLabel, txtSub, inputBg, inputBorder, cardShadow } = dashPalette(dk);
   const inputCls    = 'w-full rounded-xl px-4 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-brand-violet/25';
   const labelCls    = 'block text-sm font-semibold mb-1.5';
-  const cardShadow  = dk ? 'none' : '0 2px 16px rgba(108,99,255,0.06)';
 
   useEffect(() => {
     async function load() {
@@ -165,7 +160,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
       {/* Info séquestre */}
       <div className="flex items-start gap-2.5 rounded-2xl p-4 mb-6"
         style={{ background: dk ? 'rgba(108,99,255,0.1)' : '#f5f3ff', border: '1px solid rgba(108,99,255,0.2)' }}>
-        <Package size={16} style={{ color: '#6C63FF' }} className="mt-0.5 shrink-0" />
+        <Package size={16} style={{ color: BRAND.violet }} className="mt-0.5 shrink-0" />
         <p className="text-xs leading-relaxed" style={{ color: txtSub }}>
           Le montant d'une vente n'est crédité sur votre solde qu'après que l'acheteur ait confirmé avoir reçu son colis
           — comme sur Amazon. Marquez vos commandes comme <strong>expédiées</strong> dès que vous les envoyez.
@@ -186,7 +181,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
         <button
           onClick={() => setShowForm(true)}
           className="w-full flex items-center justify-center gap-2 text-white font-bold py-3.5 rounded-2xl transition shadow-lg mb-3"
-          style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)', boxShadow: '0 8px 24px rgba(108,99,255,0.3)' }}
+          style={{ background: GRADIENTS.brand, boxShadow: '0 8px 24px rgba(108,99,255,0.3)' }}
         >
           <ArrowDownCircle size={18} />
           {t.requestWithdrawal}
@@ -229,7 +224,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
                   key={m} type="button" onClick={() => autofillPhone(m)}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition"
                   style={method === m
-                    ? { background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', border: '1px solid #6C63FF', color: '#6C63FF' }
+                    ? { background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', border: '1px solid #6C63FF', color: BRAND.violet }
                     : { background: surfaceAlt, border: `1px solid ${inputBorder}`, color: txtSub }}
                 >
                   <Smartphone size={16} />
@@ -244,8 +239,8 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
               style={{ background: surfaceAlt, color: txtSub }}>{t.cancel}</button>
             <button type="submit" disabled={submitting}
               className="flex-1 text-white text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
-              {submitting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+              style={{ background: GRADIENTS.brand }}>
+              {submitting ? <ButtonSpinner /> : null}
               {submitting ? t.withdrawing : t.withdrawBtn}
             </button>
           </div>
@@ -278,7 +273,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
             </div>
             <button type="submit" disabled={savingNumbers}
               className="w-full text-white text-sm font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50"
-              style={{ background: numbersSaved ? '#22c55e' : 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+              style={{ background: numbersSaved ? '#22c55e' : GRADIENTS.brand }}>
               {numbersSaved ? <Check size={14} /> : null}
               {numbersSaved ? 'Enregistré !' : (savingNumbers ? '...' : 'Enregistrer')}
             </button>
@@ -321,9 +316,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
           <h3 className="font-bold text-sm" style={{ color: txtPrim }}>{t.recentTransactions}</h3>
         </div>
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-6 h-6 rounded-full animate-spin" style={{ border: '2px solid rgba(108,99,255,0.15)', borderTopColor: '#6C63FF' }} />
-          </div>
+          <CenteredSpinner className="py-8" />
         ) : transactions.length === 0 ? (
           <p className="text-center text-sm py-8" style={{ color: txtSub }}>{t.noTransactions}</p>
         ) : (
@@ -344,7 +337,7 @@ export default function Wallet({ profile, onBalanceUpdate }: WalletProps) {
                     {tx.status === 'pending' && (
                       <button onClick={() => markShipped(tx.id)} disabled={shippingId === tx.id}
                         className="flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-full transition disabled:opacity-50"
-                        style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', color: '#6C63FF' }}>
+                        style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', color: BRAND.violet }}>
                         <Truck size={11} />
                         {shippingId === tx.id ? '...' : 'Expédier'}
                       </button>

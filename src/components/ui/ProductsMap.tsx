@@ -2,6 +2,11 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, Satellite, Map as MapIcon, Search, X } from 'lucide-react';
+import { BRAND } from '../../lib/theme';
+import { filterByQuery } from '../../lib/search';
+import type { OrderRoute } from '../../lib/api/orderRoutes';
+import { courierIcon, pin3d } from './mapParts';
+import { Fit, RouteLayer, RouteSummary, type Icons } from './OrdersRouteMap';
 
 export interface MapPin {
   id: string;
@@ -20,6 +25,11 @@ interface ProductsMapProps {
   emptyLabel?: string;
   searchPlaceholder?: string;
   noResultsLabel?: string;
+  /** Livraisons à tracer sur la carte (départ → adresse, avec le livreur). */
+  routes?: OrderRoute[];
+  selectedRouteId?: string | null;
+  onSelectRoute?: (id: string) => void;
+  lang?: string;
 }
 
 const TILE_LAYERS = {
@@ -34,7 +44,7 @@ const TILE_LAYERS = {
 };
 
 function makePhotoIcon(imageUrl: string, highlighted = false) {
-  const border = highlighted ? '#FF6B9D' : '#6C63FF';
+  const border = highlighted ? BRAND.pink : BRAND.violet;
   const size = highlighted ? 52 : 44;
   const shadow = highlighted ? '0 6px 22px rgba(255,107,157,0.55)' : '0 4px 14px rgba(108,99,255,0.45)';
   return L.divIcon({
@@ -81,7 +91,14 @@ function MapController({
 export default function ProductsMap({
   pins, isDark: dk = false, height = 480,
   emptyLabel, searchPlaceholder, noResultsLabel,
+  routes = [], selectedRouteId = null, onSelectRoute, lang = 'fr',
 }: ProductsMapProps) {
+  const routeIcons = useMemo<Icons>(() => ({
+    origin: pin3d(BRAND.violet, '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg>'),
+    destination: pin3d(BRAND.pink, '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22V4M5 4h12l-2 4 2 4H5"/></svg>'),
+    courier: courierIcon(BRAND.violet),
+  }), []);
+  const selectedRoute = routes.find(r => r.id === selectedRouteId) ?? null;
   const [layer, setLayer] = useState<'simple' | 'satellite'>('simple');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -103,9 +120,8 @@ export default function ProductsMap({
     : [7.539989, -5.54708]; // Côte d'Ivoire par défaut
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return valid.slice(0, 6);
-    return valid.filter(p => p.name.toLowerCase().includes(q));
+    if (!query.trim()) return valid.slice(0, 6);
+    return filterByQuery(valid, query, p => [p.name]);
   }, [query, valid]);
 
   function selectResult(pin: MapPin) {
@@ -165,7 +181,7 @@ export default function ProductsMap({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold truncate" style={{ color: dk ? '#f2f1ff' : '#16162e' }}>{pin.name}</p>
-                    <p className="text-[10px] font-bold" style={{ color: '#6C63FF' }}>{pin.price.toLocaleString()} {pin.currency}</p>
+                    <p className="text-[10px] font-bold" style={{ color: BRAND.violet }}>{pin.price.toLocaleString()} {pin.currency}</p>
                   </div>
                 </button>
               ))}
@@ -179,17 +195,17 @@ export default function ProductsMap({
         style={{ background: dk ? '#12122b' : '#fff', border: `1px solid ${dk ? 'rgba(139,124,255,0.2)' : '#e5e7eb'}` }}>
         <button onClick={() => setLayer('simple')}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition"
-          style={layer === 'simple' ? { background: '#6C63FF', color: '#fff' } : { color: dk ? '#8c8ab0' : '#6b7280' }}>
+          style={layer === 'simple' ? { background: BRAND.violet, color: '#fff' } : { color: dk ? '#8c8ab0' : '#6b7280' }}>
           <MapIcon size={13} />
         </button>
         <button onClick={() => setLayer('satellite')}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold transition"
-          style={layer === 'satellite' ? { background: '#6C63FF', color: '#fff' } : { color: dk ? '#8c8ab0' : '#6b7280' }}>
+          style={layer === 'satellite' ? { background: BRAND.violet, color: '#fff' } : { color: dk ? '#8c8ab0' : '#6b7280' }}>
           <Satellite size={13} />
         </button>
       </div>
 
-      {valid.length === 0 ? (
+      {valid.length === 0 && routes.length === 0 ? (
         <div className="w-full h-full flex flex-col items-center justify-center gap-2"
           style={{ background: dk ? '#0d0d22' : '#faf9ff' }}>
           <Layers size={28} style={{ color: dk ? '#8c8ab0' : '#8a87a3' }} />
@@ -201,6 +217,11 @@ export default function ProductsMap({
         <MapContainer center={center} zoom={valid.length === 1 ? 13 : 6} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
           <TileLayer url={TILE_LAYERS[layer].url} attribution={TILE_LAYERS[layer].attribution} />
           <MapController focusedId={focusedId} pins={valid} markerRefs={markerRefs} />
+          {routes.length > 0 && <Fit routes={routes} selectedId={selectedRouteId} />}
+          {routes.map(r => (
+            <RouteLayer key={r.id} r={r} selectedId={selectedRouteId} onSelect={id => onSelectRoute?.(id)} icons={routeIcons}
+              labels={{ origin: lang === 'fr' ? 'Départ' : 'Start', destination: lang === 'fr' ? 'Livraison' : 'Delivery', current: lang === 'fr' ? 'Position du colis' : 'Parcel position' }} />
+          ))}
           {valid.map(pin => (
             <Marker key={pin.id} position={[pin.lat, pin.lng]}
               icon={makePhotoIcon(pin.image_url || '/logo.png', focusedId === pin.id)}
@@ -211,7 +232,7 @@ export default function ProductsMap({
               <Popup>
                 <div style={{ textAlign: 'center', minWidth: 120 }}>
                   <strong style={{ fontSize: 13 }}>{pin.name}</strong>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6C63FF', fontWeight: 700 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: BRAND.violet, fontWeight: 700 }}>
                     {pin.price.toLocaleString()} {pin.currency}
                   </p>
                 </div>
@@ -220,6 +241,7 @@ export default function ProductsMap({
           ))}
         </MapContainer>
       )}
+      {routes.length > 0 && <RouteSummary route={selectedRoute} lang={lang} />}
     </div>
   );
 }

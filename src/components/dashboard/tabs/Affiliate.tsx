@@ -3,6 +3,9 @@ import { Profile, AffiliateCommission } from '../../../lib/types';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
 import { supabase } from '../../../lib/supabase';
+import { BRAND, GRADIENTS } from '../../../lib/theme';
+import { dashPalette } from '../../../lib/dashPalette';
+import { CenteredSpinner } from '../../ui/Spinner';
 import {
   Users, Copy, Check, Share2, Sparkles, Gift, TrendingUp, Coins,
   ArrowDownCircle, Smartphone, AlertCircle, Loader2, Trophy,
@@ -143,15 +146,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
   const [err, setErr] = useState('');
 
   /* ── Theme tokens ── */
-  const surface     = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt  = dk ? '#191938' : '#faf9ff';
-  const border      = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim     = dk ? '#f2f1ff' : '#16162e';
-  const txtLabel    = dk ? '#c7c5e8' : '#2d2b45';
-  const txtSub      = dk ? '#8c8ab0' : '#8a87a3';
-  const inputBg     = dk ? '#0d0d22' : '#faf9ff';
-  const inputBorder = dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
-  const cardShadow  = dk ? 'none' : '0 2px 16px rgba(108,99,255,0.06)';
+  const { surface, surfaceAlt, border, txtPrim, txtLabel, txtSub, inputBg, inputBorder, cardShadow } = dashPalette(dk);
 
   const referralCode = profile.referral_code || '';
   const affiliateBalance = Number(profile.affiliate_balance ?? 0);
@@ -258,10 +253,10 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
   }
 
   const statCards = [
-    { icon: Users,      label: c.totalReferrals, value: totalReferrals.toString(),                   accent: '#6C63FF' },
+    { icon: Users,      label: c.totalReferrals, value: totalReferrals.toString(),                   accent: BRAND.violet },
     { icon: TrendingUp, label: c.paidReferrals,  value: paidReferrals.toString(),                    accent: '#22c55e' },
-    { icon: Coins,      label: c.balance,        value: `${affiliateBalance.toLocaleString()} FCFA`, accent: '#FF6B9D' },
-    { icon: Trophy,     label: c.lifetime,       value: `${lifetimeEarned.toLocaleString()} FCFA`,   accent: '#00C2FF' },
+    { icon: Coins,      label: c.balance,        value: `${affiliateBalance.toLocaleString()} FCFA`, accent: BRAND.pink },
+    { icon: Trophy,     label: c.lifetime,       value: `${lifetimeEarned.toLocaleString()} FCFA`,   accent: BRAND.cyan },
   ];
 
   return (
@@ -306,8 +301,8 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
             { pct: '5%', title: c.tier1, sub: c.tier1Sub, color: '#22c55e', bg: 'rgba(34,197,94,0.10)' },
-            { pct: '2%', title: c.tier2, sub: c.tier2Sub, color: '#00C2FF', bg: 'rgba(0,194,255,0.10)' },
-            { pct: '1%', title: c.tier3, sub: c.tier3Sub, color: '#6C63FF', bg: 'rgba(108,99,255,0.10)' },
+            { pct: '2%', title: c.tier2, sub: c.tier2Sub, color: BRAND.cyan, bg: 'rgba(0,194,255,0.10)' },
+            { pct: '1%', title: c.tier3, sub: c.tier3Sub, color: BRAND.violet, bg: 'rgba(108,99,255,0.10)' },
           ].map((t, i) => (
             <div key={i} className="rounded-2xl p-4 border" style={{ background: t.bg, borderColor: `${t.color}33` }}>
               <div className="flex items-center gap-2 mb-1">
@@ -326,7 +321,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
       {/* Referral link card */}
       <div className="rounded-3xl p-5 mb-6" style={{ background: surface, border: `1px solid ${border}`, boxShadow: cardShadow }}>
         <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={14} style={{ color: '#6C63FF' }} />
+          <Sparkles size={14} style={{ color: BRAND.violet }} />
           <p className="text-sm font-bold" style={{ color: txtPrim }}>{c.yourLink}</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 mb-3">
@@ -336,7 +331,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
           </div>
           <button onClick={handleCopy}
             className="flex items-center justify-center gap-2 text-white text-sm font-bold px-5 py-3 rounded-xl transition shrink-0"
-            style={{ background: copied ? '#22c55e' : 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+            style={{ background: copied ? '#22c55e' : GRADIENTS.brand }}>
             {copied ? <Check size={15} /> : <Copy size={15} />}
             {copied ? c.copied : c.copyLink}
           </button>
@@ -356,12 +351,12 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
           </button>
           <button onClick={shareOnTwitter}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition"
-            style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#f2f1ff' : '#1a1a2e' }}>
+            style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#f2f1ff' : BRAND.navy }}>
             <Twitter size={13} /> X / Twitter
           </button>
           <button onClick={handleNativeShare}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition"
-            style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', color: '#6C63FF' }}>
+            style={{ background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', color: BRAND.violet }}>
             <Share2 size={13} /> {c.share}
           </button>
         </div>
@@ -447,7 +442,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
                   key={m} type="button" onClick={() => setMethod(m)}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition"
                   style={method === m
-                    ? { background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', border: '1px solid #6C63FF', color: '#6C63FF' }
+                    ? { background: dk ? 'rgba(108,99,255,0.15)' : '#f5f3ff', border: '1px solid #6C63FF', color: BRAND.violet }
                     : { background: surfaceAlt, border: `1px solid ${inputBorder}`, color: txtSub }}
                 >
                   <Smartphone size={16} />
@@ -477,9 +472,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
           <h3 className="font-bold text-sm" style={{ color: txtPrim }}>{c.commissions}</h3>
         </div>
         {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="w-6 h-6 rounded-full animate-spin" style={{ border: '2px solid rgba(108,99,255,0.15)', borderTopColor: '#6C63FF' }} />
-          </div>
+          <CenteredSpinner className="py-10" />
         ) : commissions.length === 0 ? (
           <div className="py-10 text-center px-6">
             <Gift size={28} className="mx-auto mb-2" style={{ color: txtSub }} />
@@ -504,7 +497,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
                       {(() => {
                         const lvl = comm.level ?? 1;
                         const bg = lvl === 1 ? 'rgba(34,197,94,0.15)' : lvl === 2 ? 'rgba(0,194,255,0.15)' : 'rgba(108,99,255,0.15)';
-                        const color = lvl === 1 ? '#22c55e' : lvl === 2 ? '#00C2FF' : '#6C63FF';
+                        const color = lvl === 1 ? '#22c55e' : lvl === 2 ? BRAND.cyan : BRAND.violet;
                         const label = lvl === 1 ? c.l1 : lvl === 2 ? c.l2 : c.l3;
                         return (
                           <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider" style={{ background: bg, color }}>

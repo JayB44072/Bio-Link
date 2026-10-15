@@ -1,14 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Product, Profile, PaymentMethod } from '../../lib/types';
 import { PLAN_CONFIGS } from '../../lib/planLimits';
 import { useLang } from '../../lib/LanguageContext';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
 import { supabase } from '../../lib/supabase';
-import { LandingLang } from '../../lib/landingTranslations';
 import LocationAutocomplete, { LocationValue } from '../ui/LocationAutocomplete';
+import LanguageMenu from '../ui/LanguageMenu';
+import ThemeToggle from '../ui/ThemeToggle';
+import { BRAND, GRADIENTS } from '../../lib/theme';
 import {
   ArrowLeft, CreditCard, Smartphone, Check, AlertCircle, ShieldCheck, Download,
-  Package, Link2, Store, Lock, RotateCcw, Truck, Sun, Moon, Globe, MessageCircle,
+  Package, Link2, Store, Lock, RotateCcw, Truck, MessageCircle,
 } from 'lucide-react';
 
 export function buildWhatsAppOrderUrl(
@@ -73,13 +75,6 @@ interface PurchaseModalProps {
   onSuccess?: () => void;
 }
 
-const LANG_OPTIONS: { code: LandingLang; label: string }[] = [
-  { code: 'fr', label: '🇫🇷 Français'  },
-  { code: 'en', label: '🇬🇧 English'   },
-  { code: 'pt', label: '🇵🇹 Português' },
-  { code: 'de', label: '🇩🇪 Deutsch'   },
-];
-
 export default function PurchaseModal({ product, seller, cartItems, onClose, onSuccess }: PurchaseModalProps) {
   const { t } = useLang();
   const { isDark: dk, toggleDark, lang, setLang } = useAppPrefs();
@@ -94,21 +89,11 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [deliveryLocation, setDeliveryLocation] = useState<LocationValue>({ address: '', lat: null, lng: null });
-  const [langOpen, setLangOpen] = useState(false);
-  const langRef = useRef<HTMLDivElement>(null);
 
   // Pour la simulation de carte bancaire
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvc, setCardCvc] = useState('');
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const commissionRate = PLAN_CONFIGS[seller.plan_type]?.commission_rate ?? 0.05;
   const unitPrice = product.price;
@@ -152,14 +137,19 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
       // Enregistre la commande — l'argent reste "en attente" (modèle Amazon) :
       // le vendeur n'est crédité et la commission encaissée qu'à la confirmation
       // de réception par l'acheteur (voir BuyerOrderPage).
-      const { data: tx, error: txErr } = await supabase.from('transactions').insert({
+      // Identifiant créé ici : la table n'est plus lisible publiquement, on ne peut donc pas relire la ligne après l'insertion.
+      const newOrderId = crypto.randomUUID();
+      const { error: txErr } = await supabase.from('transactions').insert({
+        id: newOrderId,
         // Un panier multi-produits n'a pas de product_id unique valide (uuid) —
         // on laisse la colonne vide dans ce cas plutôt que d'envoyer un id fictif.
         product_id: isSyntheticCart ? null : product.id,
         seller_id: seller.user_id,
         buyer_name: name,
-        buyer_email: method === 'card' ? email : undefined,
+        buyer_email: email.trim().toLowerCase() || undefined,
         buyer_phone: phone,
+        // Seuls les 4 derniers chiffres sont conservés (retrouver sa commande) — jamais le numéro complet
+        card_last4: method === 'card' ? cardNumber.replace(/\D/g, '').slice(-4) : null,
         amount: totalAmount,
         platform_fee: fee,
         seller_amount: sellerAmount,
@@ -169,11 +159,11 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
         delivery_address: deliveryLocation.address,
         delivery_lat: deliveryLocation.lat,
         delivery_lng: deliveryLocation.lng,
-      }).select().maybeSingle();
+      });
       if (txErr) throw txErr;
 
       onSuccess?.();
-      setOrderId(tx?.id ?? null);
+      setOrderId(newOrderId);
       setSuccess(true);
 
       // Notifications (fire-and-forget, ne bloquent jamais le paiement)
@@ -184,7 +174,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
         message: lang === 'fr'
           ? `${name} a commandé "${product.name}" pour ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`
           : `${name} ordered "${product.name}" for ${totalAmount.toLocaleString()} ${product.currency} (${method.toUpperCase()}).`,
-        metadata: { order_id: tx?.id, product_name: product.name, amount: totalAmount, currency: product.currency, buyer_name: name },
+        metadata: { order_id: newOrderId, product_name: product.name, amount: totalAmount, currency: product.currency, buyer_name: name },
       }).then(() => {}).catch(() => {});
 
       supabase.functions.invoke('send-order-email', {
@@ -195,7 +185,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
           amount: totalAmount,
           currency: product.currency,
           payment_method: method,
-          order_id: tx?.id,
+          order_id: newOrderId,
         },
       }).catch(() => {});
     } catch (err: unknown) {
@@ -378,34 +368,16 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
   /* ══ Sélecteur langue + mode sombre, réutilisé sur les deux écrans ══ */
   const HeaderControls = () => (
     <div className="flex items-center gap-2">
-      <button onClick={toggleDark}
+      <ThemeToggle isDark={dk} onToggle={toggleDark}
         className="p-2 rounded-xl transition-colors"
-        style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }}>
-        {dk ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-      <div className="relative" ref={langRef}>
-        <button onClick={() => setLangOpen(v => !v)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
-          style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#c0c0e0' : '#6b7280' }}>
-          <Globe size={13} />{lang.toUpperCase()}
-        </button>
-        {langOpen && (
-          <div className="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
-            style={{ background: surface, borderColor: border }}>
-            {LANG_OPTIONS.map(({ code, label }) => (
-              <button key={code} onClick={() => { setLang(code); setLangOpen(false); }}
-                className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors"
-                style={{
-                  color: lang === code ? '#6C63FF' : txtPrim,
-                  background: lang === code ? hoverBg : 'transparent',
-                }}>
-                {label}
-                {lang === code && <Check size={11} className="ml-auto text-brand-violet" />}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+        style={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#fbbf24' : '#6b7280' }} />
+      <LanguageMenu value={lang} onChange={setLang} iconSize={13}
+        buttonClassName="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors"
+        buttonStyle={{ background: dk ? 'rgba(255,255,255,0.08)' : '#f3f4f6', color: dk ? '#c0c0e0' : '#6b7280' }}
+        menuClassName="absolute right-0 top-full mt-2 rounded-xl shadow-xl border py-1 min-w-[140px] z-50"
+        menuStyle={{ background: surface, borderColor: border }}
+        itemStyle={a => ({ color: a ? BRAND.violet : txtPrim, background: a ? hoverBg : 'transparent' })}
+        checkSize={11} checkClassName="ml-auto text-brand-violet" />
     </div>
   );
 
@@ -519,7 +491,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                   {gallery.map((img, i) => (
                     <button key={i} onClick={() => setActiveImg(i)}
                       className="aspect-square rounded-xl overflow-hidden border-2 transition"
-                      style={{ borderColor: activeImg === i ? '#6C63FF' : inputBorder }}>
+                      style={{ borderColor: activeImg === i ? BRAND.violet : inputBorder }}>
                       <img src={img} alt="" className="w-full h-full object-cover" />
                     </button>
                   ))}
@@ -555,7 +527,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                 {/* Total */}
                 <div className="flex items-center justify-between mt-3 px-1 pt-3" style={{ borderTop: `1px solid ${border}` }}>
                   <span className="text-xs font-bold uppercase tracking-wide" style={{ color: txtLabel }}>{lang === 'fr' ? 'Total' : 'Total'}</span>
-                  <span className="font-black text-xl tracking-tight" style={{ color: '#6C63FF' }}>{totalAmount.toLocaleString()} {product.currency}</span>
+                  <span className="font-black text-xl tracking-tight" style={{ color: BRAND.violet }}>{totalAmount.toLocaleString()} {product.currency}</span>
                 </div>
 
                 {!isSyntheticCart && (
@@ -624,7 +596,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                           method === id ? `${dk ? '' : activeClass} shadow-sm ring-1 ring-current/20` : ''
                         }`}
                         style={method === id
-                          ? (dk ? { borderColor: '#6C63FF', background: 'rgba(108,99,255,0.12)', color: '#a5b4fc' } : {})
+                          ? (dk ? { borderColor: BRAND.violet, background: 'rgba(108,99,255,0.12)', color: '#a5b4fc' } : {})
                           : { borderColor: inputBorder, color: txtSub, background: inputBg }}
                       >
                         {logo ? (
@@ -658,16 +630,20 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                     isDark={dk}
                   />
 
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5" style={{ color: txtLabel }}>{lang === 'fr' ? 'Adresse E-mail (facultatif)' : `${t.buyerEmail} (optional)`}</label>
+                    <input
+                      type="email" value={email} onChange={e => setEmail(e.target.value)}
+                      placeholder="nom@exemple.com"
+                      className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
+                    />
+                    <p className="mt-1 text-[11px]" style={{ color: txtLabel, opacity: 0.7 }}>
+                      {lang === 'fr' ? 'Si vous suivez la boutique avec cette adresse, vos livraisons apparaîtront sur sa carte.' : 'If you follow the shop with this address, your deliveries will show on its map.'}
+                    </p>
+                  </div>
+
                   {method === 'card' && (
                     <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold mb-1.5" style={{ color: txtLabel }}>{lang === 'fr' ? 'Adresse E-mail' : t.buyerEmail}</label>
-                        <input
-                          type="email" value={email} onChange={e => setEmail(e.target.value)}
-                          placeholder="nom@exemple.com"
-                          className={inputCls} style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: txtPrim }}
-                        />
-                      </div>
                       <div>
                         <label className="block text-xs font-bold mb-1.5" style={{ color: txtLabel }}>Numéro de carte *</label>
                         <input
@@ -722,7 +698,7 @@ export default function PurchaseModal({ product, seller, cartItems, onClose, onS
                   type="submit"
                   disabled={submitting || !isFormValid()}
                   className="w-full disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xl transform active:scale-99"
-                  style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}
+                  style={{ background: GRADIENTS.brand }}
                 >
                   {submitting ? (
                     <>

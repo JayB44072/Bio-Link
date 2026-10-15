@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { recentPublicSales } from '../../lib/api/orders';
 import { supabase } from '../../lib/supabase';
 import { LandingLang } from '../../lib/landingTranslations';
 import { ShoppingBag } from 'lucide-react';
@@ -103,6 +104,10 @@ export default function LiveSalesToast({ sellerId, interactive, lang }: LiveSale
     let cancelled = false;
 
     async function load() {
+      const safe = await recentPublicSales(sellerId);
+      if (cancelled) return;
+      if (safe) { setSales(safe); return; }
+      // Repli tant que la migration de sécurité n'est pas exécutée
       const { data: txs } = await supabase
         .from('transactions')
         .select('id, buyer_name, delivery_address, amount, currency, created_at, product_id')

@@ -1,20 +1,25 @@
-/** @type {import('tailwindcss').Config} */
-export default {
+import type { Config } from 'tailwindcss';
+import { BRAND, GRADIENTS } from './src/lib/theme';
+
+const config: Config = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
         brand: {
-          violet: '#6C63FF',
-          cyan:   '#00C2FF',
-          pink:   '#FF6B9D',
-          navy:   '#1a1a2e',
+          violet: BRAND.violet,
+          cyan: BRAND.cyan,
+          pink: BRAND.pink,
+          pinkDark: BRAND.pinkDark,
+          pinkDeep: BRAND.pinkDeep,
+          navy: BRAND.navy,
         },
       },
       backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #6C63FF 0%, #00C2FF 100%)',
-        'brand-gradient-r': 'linear-gradient(135deg, #00C2FF 0%, #6C63FF 100%)',
-        'soft-bg': 'linear-gradient(160deg, #F0EEFF 0%, #E8F7FF 100%)',
+        'brand-gradient': GRADIENTS.brand,
+        'brand-gradient-r': GRADIENTS.brandReverse,
+        'soft-bg': GRADIENTS.soft,
+        'pink-panel': GRADIENTS.pinkPanel,
       },
       animation: {
         'float': 'float 6s ease-in-out infinite',
@@ -51,3 +56,5 @@ export default {
   },
   plugins: [],
 };
+
+export default config;

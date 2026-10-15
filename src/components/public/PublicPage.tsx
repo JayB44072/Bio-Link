@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Profile, Product, Service } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
+import { shopSeo, useSeo, SITE_NAME } from '../../lib/seo';
+import { productSeo } from '../../lib/seoPages';
 import LanguageSelector from '../ui/LanguageSelector';
 import PublicProfileView from './PublicProfileView';
 import { Skeleton, SkeletonProductCard } from '../ui/Skeleton';
@@ -9,10 +11,13 @@ import { Link2 } from 'lucide-react';
 
 interface PublicPageProps {
   username: string;
+  /** Produit ouvert par le lien (`/u/<boutique>/p/<produit>`). */
+  productId?: string | null;
 }
 
-export default function PublicPage({ username }: PublicPageProps) {
-  const { t } = useLang();
+export default function PublicPage({ username, productId = null }: PublicPageProps) {
+  const [openProductId, setOpenProductId] = useState<string | null>(productId);
+  const { t, lang } = useLang();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -42,6 +47,12 @@ export default function PublicPage({ username }: PublicPageProps) {
     }
     load();
   }, [username]);
+
+  // Titre, description, aperçu de partage et données structurées de la boutique ; page inconnue : non indexée
+  const openProduct = openProductId ? products.find(p => p.id === openProductId) : undefined;
+  useSeo(profile
+    ? (openProduct ? productSeo(profile, openProduct, lang) : shopSeo(profile, products, services, lang))
+    : loading ? null : { title: `Boutique introuvable | ${SITE_NAME}`, description: 'Cette boutique n’existe pas ou a été supprimée.', noindex: true, lang });
 
   if (loading) {
     return (
@@ -80,5 +91,5 @@ export default function PublicPage({ username }: PublicPageProps) {
     );
   }
 
-  return <PublicProfileView profile={profile} products={products} services={services} interactive />;
+  return <PublicProfileView profile={profile} products={products} services={services} interactive initialProductId={productId} onProductChange={setOpenProductId} />;
 }

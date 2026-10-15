@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Star, Send, MessageSquare, Sparkles } from 'lucide-react';
 import type { LandingT } from '../../lib/landingTranslations';
+import { GRADIENTS } from '../../lib/theme';
 
 interface Review {
   id: string;
@@ -87,7 +88,7 @@ export default function ReviewsSection({ t, dk }: Props) {
   };
 
   const card = dk ? 'bg-[#111128] border-[#1e1e3f]' : 'bg-white border-gray-100';
-  const txt  = dk ? 'text-[#f0f0ff]' : 'text-[#1a1a2e]';
+  const txt  = dk ? 'text-[#f0f0ff]' : 'text-brand-navy';
   const sub  = dk ? 'text-gray-400' : 'text-gray-500';
   const inp  = dk
     ? 'bg-[#0a0a1e] border-[#1e1e3f] text-[#f0f0ff] placeholder-gray-600 focus:border-purple-500'
@@ -130,7 +131,7 @@ export default function ReviewsSection({ t, dk }: Props) {
           <button
             onClick={() => { setFormOpen(v => !v); setStatus('idle'); }}
             className="inline-flex items-center gap-2 text-sm font-bold text-white px-6 py-3 rounded-xl shadow-md shadow-purple-300/30 transition-all hover:-translate-y-0.5 hover:shadow-lg"
-            style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}
+            style={{ background: GRADIENTS.brand }}
           >
             <MessageSquare size={15} />
             {t.reviewFormTitle}
@@ -173,7 +174,7 @@ export default function ReviewsSection({ t, dk }: Props) {
               <button
                 type="submit" disabled={submitting || rating === 0}
                 className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white py-3 rounded-xl transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}
+                style={{ background: GRADIENTS.brand }}
               >
                 <Send size={14} />
                 {submitting ? '...' : t.reviewFormSubmit}
@@ -201,7 +202,7 @@ export default function ReviewsSection({ t, dk }: Props) {
                 <p className={`text-sm leading-relaxed mt-3 mb-4 ${sub}`}>"{r.message}"</p>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                    style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+                    style={{ background: GRADIENTS.brand }}>
                     {r.name.charAt(0).toUpperCase()}
                   </div>
                   <div>

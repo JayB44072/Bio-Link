@@ -8,8 +8,11 @@ import Dashboard from './components/dashboard/Dashboard';
 import PublicPage from './components/public/PublicPage';
 import BuyerOrderPage from './components/public/BuyerOrderPage';
 import OrderLookupPage from './components/public/OrderLookupPage';
+import UnsubscribePage from './components/public/UnsubscribePage';
 import PrivacyPage from './components/legal/PrivacyPage';
+import CguPage from './components/legal/CguPage';
 import { Session } from '@supabase/supabase-js';
+import { useSeo } from './lib/seo';
 
 type AuthMode = null | 'login' | 'register';
 
@@ -17,19 +20,32 @@ function Router({ session }: { session: Session | null }) {
   const path = window.location.pathname;
   const [authMode, setAuthMode] = useState<AuthMode>(null);
 
-  // Privacy policy page
-  if (path === '/privacy') return <PrivacyPage />;
+  // Pages personnelles (commande, désabonnement, tableau de bord) : jamais indexées
+  const isPrivate = /^\/(commande|suivi|desabonnement|preferences-email)(\/|$)/.test(path) || (!!session && !path.startsWith('/u/'));
+  useSeo(isPrivate ? { title: 'BioLinkWD', description: 'Espace personnel BioLinkWD.', noindex: true, path } : null);
+
+  // Legal pages
+  if (path === '/cgu') return <CguPage />;
+  if (path === '/confidentialite' || path === '/privacy') return <PrivacyPage />;
 
   // Order tracking page: /commande/:id
   const orderMatch = path.match(/^\/commande\/([^/]+)\/?$/);
   if (orderMatch) return <BuyerOrderPage orderId={orderMatch[1]} />;
 
+  // Désabonnement d'une boutique (lien présent dans chaque e-mail)
+  const unsubMatch = path.match(/^\/desabonnement\/([0-9a-fA-F-]{36})\/?$/);
+  if (unsubMatch) return <UnsubscribePage token={unsubMatch[1]} />;
+
+  // Désinscription des e-mails de la plateforme (rappels, nouveautés)
+  const prefMatch = path.match(/^\/preferences-email\/([0-9a-fA-F-]{36})\/?$/);
+  if (prefMatch) return <UnsubscribePage token={prefMatch[1]} kind="platform" />;
+
   // Retrouver sa commande par numéro de téléphone (en cas de lien perdu)
   if (path === '/suivi') return <OrderLookupPage />;
 
   // Public profile page: /u/:username
-  const publicMatch = path.match(/^\/u\/([^/]+)\/?$/);
-  if (publicMatch) return <PublicPage username={publicMatch[1]} />;
+  const publicMatch = path.match(/^\/u\/([^/]+)(?:\/p\/([0-9a-fA-F-]{36}))?\/?$/);
+  if (publicMatch) return <PublicPage username={publicMatch[1]} productId={publicMatch[2] ?? null} />;
 
   // Logged in → dashboard
   if (session) return <Dashboard />;
@@ -58,11 +74,17 @@ export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    // Si Supabase met trop de temps à répondre (réseau lent, refresh de token),
+    // on affiche la landing au lieu de rester bloqué sur le skeleton.
+    const fallback = setTimeout(() => setSession(s => (s === undefined ? null : s)), 3000);
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => setSession(session))
+      .catch(() => setSession(null))
+      .finally(() => clearTimeout(fallback));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setSession(session));
     const onPop = () => setSession(s => s);
     window.addEventListener('popstate', onPop);
-    return () => { subscription.unsubscribe(); window.removeEventListener('popstate', onPop); };
+    return () => { clearTimeout(fallback); subscription.unsubscribe(); window.removeEventListener('popstate', onPop); };
   }, []);
 
   if (session === undefined) {

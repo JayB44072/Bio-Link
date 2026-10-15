@@ -1,10 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { Profile, Transaction } from '../../../lib/types';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
-import { supabase } from '../../../lib/supabase';
+import { listSellerTransactions, markTransactionShipped, cancelTransaction } from '../../../lib/api/transactions';
+import { getProductQuantity, setProductQuantity } from '../../../lib/api/products';
+import { BRAND, GRADIENTS } from '../../../lib/theme';
+import { dashPalette } from '../../../lib/dashPalette';
+import { CenteredSpinner } from '../../ui/Spinner';
+import EmptyState from '../../ui/EmptyState';
+import SearchField from '../../ui/SearchField';
+import { filterByQuery } from '../../../lib/search';
+import { useFeedback } from '../../../lib/feedbackContext';
 import {
-  Package, Truck, CheckCircle2, XCircle, Smartphone, CreditCard, MessageCircle, Download,
+  Package, Truck, CheckCircle2, XCircle, Smartphone, CreditCard, MessageCircle, Download, Route,
 } from 'lucide-react';
+
+// La carte (Leaflet) n'est chargée que lorsque le vendeur ouvre un suivi
+const TrackingModal = lazy(() => import('./orders/TrackingModal'));
 
 interface OrdersProps {
   profile: Profile;
@@ -22,39 +33,37 @@ const FILTERS: { id: FilterId; label: string }[] = [
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ComponentType<{ size?: number; className?: string }> }> = {
   pending:   { label: 'En attente d\'envoi', color: '#f59e0b', icon: Package },
-  shipped:   { label: 'Expédiée',            color: '#6C63FF', icon: Truck },
+  shipped:   { label: 'Expédiée',            color: BRAND.violet, icon: Truck },
   completed: { label: 'Livrée · payée',      color: '#22c55e', icon: CheckCircle2 },
   cancelled: { label: 'Annulée',             color: '#ef4444', icon: XCircle },
 };
 
 export default function Orders({ profile }: OrdersProps) {
   const { isDark: dk } = useAppPrefs();
+  const { confirm } = useFeedback();
   const [orders, setOrders] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterId>('all');
+  const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [trackingOrder, setTrackingOrder] = useState<Transaction | null>(null);
 
-  const surface    = dk ? '#12122b' : '#ffffff';
-  const surfaceAlt = dk ? '#191938' : '#faf9ff';
-  const border     = dk ? 'rgba(139,124,255,0.16)' : '#eeebfb';
-  const txtPrim    = dk ? '#f2f1ff' : '#16162e';
-  const txtSub     = dk ? '#8c8ab0' : '#8a87a3';
-  const cardShadow = dk ? 'none' : '0 2px 16px rgba(108,99,255,0.06)';
+  const { surface, surfaceAlt, border, txtPrim, txtSub, cardShadow } = dashPalette(dk);
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('seller_id', profile.user_id)
-        .order('created_at', { ascending: false });
+      const { data } = await listSellerTransactions(profile.user_id);
       setOrders((data as Transaction[]) || []);
       setLoading(false);
     }
     load();
   }, [profile.user_id]);
 
-  const filteredOrders = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+  const filteredOrders = filterByQuery(
+    filter === 'all' ? orders : orders.filter(o => o.status === filter),
+    query,
+    o => [o.buyer_name, o.buyer_phone, o.buyer_email, o.delivery_address, o.id, o.payment_method, o.amount],
+  );
   const counts: Record<FilterId, number> = {
     all: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
@@ -65,19 +74,26 @@ export default function Orders({ profile }: OrdersProps) {
 
   async function markShipped(id: string) {
     setBusyId(id);
-    await supabase.from('transactions').update({ status: 'shipped', shipped_at: new Date().toISOString() }).eq('id', id);
+    await markTransactionShipped(id);
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'shipped', shipped_at: new Date().toISOString() } : o));
     setBusyId(null);
   }
 
   async function cancelOrder(order: Transaction) {
-    if (!confirm('Annuler cette commande ? Aucun montant ne sera crédité et le stock sera restauré.')) return;
+    const ok = await confirm({
+      title: 'Annuler cette commande ?',
+      message: 'Aucun montant ne sera crédité et le stock sera restauré.',
+      confirmLabel: 'Annuler la commande',
+      cancelLabel: 'Garder',
+      danger: true,
+    });
+    if (!ok) return;
     setBusyId(order.id);
-    await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', order.id);
+    await cancelTransaction(order.id);
     if (order.product_id) {
-      const { data: prod } = await supabase.from('products').select('quantity').eq('id', order.product_id).maybeSingle();
+      const { data: prod } = await getProductQuantity(order.product_id);
       if (prod) {
-        await supabase.from('products').update({ quantity: prod.quantity + 1 }).eq('id', order.product_id);
+        await setProductQuantity(order.product_id, prod.quantity + 1);
       }
     }
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled' } : o));
@@ -123,13 +139,16 @@ export default function Orders({ profile }: OrdersProps) {
         Suivez vos commandes en cours, expédiées, livrées et annulées.
       </p>
 
+      <SearchField className="mb-4 max-w-md" value={query} onChange={setQuery} palette={{ surfaceAlt, border, txtPrim, txtSub }}
+        placeholder="Rechercher un client, un téléphone, une adresse…" label="Rechercher une commande" clearLabel="Effacer la recherche" />
+
       {/* Filtres */}
       <div className="flex gap-1.5 mb-5 overflow-x-auto scrollbar-hide">
         {FILTERS.map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition"
             style={filter === f.id
-              ? { background: 'linear-gradient(135deg,#6C63FF,#8B7CFF)', color: '#fff' }
+              ? { background: GRADIENTS.violetSoft, color: '#fff' }
               : { background: surfaceAlt, color: txtSub, border: `1px solid ${border}` }}>
             {f.label} <span className="opacity-70">({counts[f.id]})</span>
           </button>
@@ -137,14 +156,9 @@ export default function Orders({ profile }: OrdersProps) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 rounded-full animate-spin" style={{ border: '2px solid rgba(108,99,255,0.15)', borderTopColor: '#6C63FF' }} />
-        </div>
+        <CenteredSpinner className="py-16" />
       ) : filteredOrders.length === 0 ? (
-        <div className="text-center py-16 rounded-3xl" style={{ background: surfaceAlt, border: `1px dashed ${border}` }}>
-          <Package size={36} className="mx-auto mb-3 opacity-40" style={{ color: txtSub }} />
-          <p className="text-sm font-medium" style={{ color: txtSub }}>Aucune commande dans cette catégorie.</p>
-        </div>
+        <EmptyState icon={Package} iconSize={36} palette={{ surfaceAlt, border, txtSub }} message={query.trim() ? `Aucune commande ne correspond à « ${query.trim()} ».` : 'Aucune commande dans cette catégorie.'} />
       ) : (
         <div className="space-y-3">
           {filteredOrders.map(order => {
@@ -184,17 +198,23 @@ export default function Orders({ profile }: OrdersProps) {
                     <>
                       <button onClick={() => markShipped(order.id)} disabled={busyId === order.id}
                         className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition disabled:opacity-50"
-                        style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)', color: '#fff' }}>
+                        style={{ background: GRADIENTS.brand, color: '#fff' }}>
                         <Truck size={13} />{busyId === order.id ? '...' : 'Marquer expédiée'}
                       </button>
                       <button onClick={() => cancelOrder(order)} disabled={busyId === order.id}
                         className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition disabled:opacity-50"
-                        style={{ background: dk ? 'rgba(255,107,157,0.1)' : '#fff1f6', color: '#FF6B9D' }}>
+                        style={{ background: dk ? 'rgba(255,107,157,0.1)' : '#fff1f6', color: BRAND.pink }}>
                         <XCircle size={13} />Annuler
                       </button>
                     </>
                   )}
-                  {whatsappUrl && (
+                  {(order.status === 'pending' || order.status === 'shipped') && (
+                    <button onClick={() => setTrackingOrder(order)}
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition"
+                      style={{ background: 'rgba(108,99,255,0.12)', color: BRAND.violet }}>
+                      <Route size={13} />Suivi de livraison
+                    </button>
+                  )}                  {whatsappUrl && (
                     <a href={whatsappUrl} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition"
                       style={{ background: surfaceAlt, color: txtSub, border: `1px solid ${border}` }}>
@@ -211,6 +231,17 @@ export default function Orders({ profile }: OrdersProps) {
             );
           })}
         </div>
+      )}
+
+      {trackingOrder && (
+        <Suspense fallback={null}>
+          <TrackingModal
+            order={trackingOrder}
+            profile={profile}
+            onClose={() => setTrackingOrder(null)}
+            onShipped={id => setOrders(prev => prev.map(o => o.id === id ? { ...o, status: 'shipped', shipped_at: new Date().toISOString() } : o))}
+          />
+        </Suspense>
       )}
     </div>
   );

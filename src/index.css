@@ -9,3 +9,110 @@
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Hero « Cinéma » : apparition des légendes et indice de défilement ── */
+@keyframes cinemaIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cinemaBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+.cinema-in { animation: cinemaIn 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.cinema-bob { animation: cinemaBob 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .cinema-in, .cinema-bob { animation: none; }
+}
+/* ── Fond animé du hero « Cinéma » ── */
+@keyframes cinemaDriftA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(18%, 12%) scale(1.15); }
+}
+@keyframes cinemaDriftB {
+  0%, 100% { transform: translate(0, 0) scale(1.1); }
+  50% { transform: translate(-16%, -14%) scale(0.95); }
+}
+@keyframes cinemaSweep {
+  0% { left: -35%; }
+  100% { left: 120%; }
+}
+@keyframes cinemaRing {
+  from { opacity: 0.7; transform: translate(-50%, -50%) scale(0.4); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }
+}
+.cinema-drift-a { animation: cinemaDriftA 18s ease-in-out infinite; }
+.cinema-drift-b { animation: cinemaDriftB 23s ease-in-out infinite; }
+.cinema-sweep { animation: cinemaSweep 11s linear infinite; }
+.cinema-ring { animation: cinemaRing 1.1s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .cinema-drift-a, .cinema-drift-b, .cinema-sweep, .cinema-ring { animation: none; }
+}
+/* ── Services : ruban sinusoïdal ── */
+@keyframes waveDraw { to { stroke-dashoffset: 0; } }
+@keyframes waveFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -91; } }
+@keyframes waveIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes waveSpin { to { transform: rotate(360deg); } }
+.wave-draw { animation: waveDraw 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.wave-flow { animation: waveFlow 2.6s linear infinite; }
+.wave-in { animation: waveIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.wave-spin { animation: waveSpin 14s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .wave-draw { animation: none; stroke-dashoffset: 0 !important; }
+  .wave-flow, .wave-in, .wave-spin { animation: none; }
+}
+/* ── Hero Cinéma : produits sur les côtés (visibles d'emblée si l'on réduit les animations) ── */
+@media (prefers-reduced-motion: reduce) {
+  .hero-deck-item { opacity: 1 !important; transform: none !important; }
+}
+/* ── Services : 3D au défilement. --f (position signée) et --a (distance au centre) sont posées par useScrollFocus ── */
+.wave3d-stage { perspective: 1100px; }
+.wave3d-card {
+  transform-style: preserve-3d;
+  transform:
+    translate3d(0, calc(var(--f, 0) * 24px), calc(var(--a, 0) * -110px))
+    rotateY(calc(var(--f, 0) * var(--dir, 1) * 24deg))
+    rotateX(calc(var(--f, 0) * -9deg))
+    scale(calc(1 - var(--a, 0) * 0.06));
+  opacity: calc(1 - var(--a, 0) * 0.42);
+  will-change: transform, opacity;
+}
+.wave3d-coin {
+  transform-style: preserve-3d;
+  transform:
+    translateZ(calc((1 - var(--a, 0)) * 48px))
+    rotateY(calc(var(--f, 0) * -115deg))
+    rotateX(calc(var(--f, 0) * 14deg));
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wave3d-card, .wave3d-coin { transform: none; opacity: 1; }
+}
+/* ── Carte de livraison : pulsation du repère de position ── */
+@keyframes pulseDot {
+  from { transform: scale(0.7); opacity: 0.5; }
+  to { transform: scale(1.7); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="pulseDot"] { animation: none !important; }
+}
+/* ── Cartes de livraison : trajet animé, livreur et vue 3D ── */
+@keyframes routeFlow { to { stroke-dashoffset: -24; } }
+.route-flow { animation: routeFlow 1.1s linear infinite; }
+@keyframes courierBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes courierShadow { 0%, 100% { transform: scaleX(1); opacity: .35; } 50% { transform: scaleX(.82); opacity: .22; } }
+.courier3d { position: relative; width: 46px; height: 46px; transform-origin: 50% 100%; transition: transform .8s cubic-bezier(.4,0,.2,1); }
+.courier3d__shadow { position: absolute; left: 6px; right: 6px; bottom: 0; height: 9px; border-radius: 50%; background: #000; animation: courierShadow 1s ease-in-out infinite; }
+.courier3d__body { position: absolute; inset: 0 0 4px 0; animation: courierBob 1s ease-in-out infinite; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); }
+.marker3d { transform-origin: 50% 100%; transition: transform .8s cubic-bezier(.4,0,.2,1); }
+.map3d-stage { position: relative; overflow: hidden; perspective: 900px; background: #dfe7ef; }
+.map3d-plane { width: 100%; height: 100%; transform-origin: 50% 70%; transition: transform .9s cubic-bezier(.4,0,.2,1); }
+.map3d-stage.is-3d .map3d-plane { transform: rotateX(52deg) scale(1.55) translateY(-4%); }
+.map3d-stage.is-3d .courier3d, .map3d-stage.is-3d .marker3d { transform: rotateX(-52deg) scale(.7); }
+@media (prefers-reduced-motion: reduce) {
+  .route-flow, .courier3d__body, .courier3d__shadow { animation: none; }
+  .map3d-plane, .courier3d, .marker3d { transition: none; }
+}

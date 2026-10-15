@@ -136,6 +136,25 @@ export interface ShopThemeConfig {
   priceStyle?: 'inline' | 'top-left' | 'strikethrough-sale';
   /** Secondary accent color (used for banners, badges, decorations) */
   accentColor?: string;
+  /** Si défini, la boutique affiche en tête un produit 3D qui se décompose en ses pièces. */
+  hero3d?: Hero3DStyle;
+  /** scroll : le défilement pilote l'animation 3D (hero « Cinéma »). Par défaut : boucle automatique. */
+  heroMode?: 'loop' | 'scroll';
+}
+
+/** Habillage de la scène du héros 3D (les couleurs sont indépendantes du mode clair/sombre). */
+export interface Hero3DStyle {
+  /** Fond CSS de la scène */
+  stage: string;
+  /** Couleur d'accent des pièces et de la lueur */
+  accent: string;
+  /** Teinte de la lumière de contour */
+  rim: string;
+  /** Texte principal / secondaire sur la scène */
+  ink: string;
+  muted: string;
+  /** Fond des pastilles et barres de progression */
+  chip: string;
 }
 
 const defaultShop: ShopThemeConfig = {
@@ -334,6 +353,136 @@ export const SHOP_THEMES: Record<string, ShopThemeConfig> = {
     priceStyle: 'inline',
     accentColor: '#4c6f40',
   },
+
+  /* ── Thèmes « Showroom » : héros 3D (le produit se décompose en ses pièces) ── */
+
+  /* Studio : fond clair de studio photo */
+  studio: {
+    pageBg: '#16171c', pageBgLight: '#f4f5f8',
+    cardBg: '#1f2027', cardBgLight: '#ffffff',
+    cardBorder: 'rgba(255,255,255,0.08)', cardBorderLight: 'rgba(15,23,42,0.07)',
+    textColor: '#f3f4f8', textColorLight: '#0f172a',
+    subtextColor: '#9ca0b3', subtextColorLight: '#64748b',
+    priceColor: '#0f172a',
+    buttonGradient: 'linear-gradient(135deg,#111827,#374151)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 8px 28px rgba(15,23,42,0.08)',
+    headerBg: 'rgba(22,23,28,0.95)', headerBgLight: 'rgba(244,245,248,0.95)',
+    inherentlyDark: false,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#111827',
+    hero3d: { stage: 'radial-gradient(120% 90% at 50% 0%,#ffffff 0%,#e9ebf2 60%,#dfe2ec 100%)', accent: '#4f46e5', rim: '#a5b4fc', ink: '#0f172a', muted: '#64748b', chip: 'rgba(15,23,42,0.08)' },
+  },
+
+  /* Néon : violet profond, lueur cyan */
+  neon: {
+    pageBg: '#08061a', pageBgLight: null,
+    cardBg: '#120e2b', cardBgLight: null,
+    cardBorder: 'rgba(124,92,255,0.3)', cardBorderLight: null,
+    textColor: '#f1eeff', textColorLight: null,
+    subtextColor: '#9a93cf', subtextColorLight: null,
+    priceColor: '#22e4ff',
+    buttonGradient: 'linear-gradient(135deg,#7c5cff,#22e4ff)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 0 28px rgba(124,92,255,0.18)',
+    headerBg: 'rgba(8,6,26,0.92)', headerBgLight: null,
+    inherentlyDark: true,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#22e4ff',
+    hero3d: { stage: 'radial-gradient(90% 70% at 50% 35%,#2a1b6e 0%,#120a38 55%,#07051a 100%)', accent: '#22e4ff', rim: '#8b6cff', ink: '#f1eeff', muted: '#a79fe0', chip: 'rgba(255,255,255,0.12)' },
+  },
+
+  /* Coucher de soleil : chaud, orange et rose */
+  sunset: {
+    pageBg: '#1d1210', pageBgLight: '#fff6f0',
+    cardBg: '#2a1a16', cardBgLight: '#ffffff',
+    cardBorder: 'rgba(255,138,92,0.22)', cardBorderLight: 'rgba(255,138,92,0.22)',
+    textColor: '#ffeee4', textColorLight: '#3a1f14',
+    subtextColor: '#d6a692', subtextColorLight: '#a07260',
+    priceColor: '#ff7a45',
+    buttonGradient: 'linear-gradient(135deg,#ff7a45,#ff4d7e)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 8px 26px rgba(255,90,60,0.12)',
+    headerBg: 'rgba(29,18,16,0.95)', headerBgLight: 'rgba(255,246,240,0.95)',
+    inherentlyDark: false,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#ff7a45',
+    hero3d: { stage: 'linear-gradient(160deg,#ffb36b 0%,#ff6f61 48%,#8e2c6d 100%)', accent: '#2b1b4a', rim: '#ffd1a1', ink: '#ffffff', muted: 'rgba(255,255,255,0.8)', chip: 'rgba(255,255,255,0.22)' },
+  },
+
+  /* Aurore : vert profond et turquoise */
+  aurora: {
+    pageBg: '#07151a', pageBgLight: null,
+    cardBg: '#0d2128', cardBgLight: null,
+    cardBorder: 'rgba(52,211,153,0.22)', cardBorderLight: null,
+    textColor: '#e6fff6', textColorLight: null,
+    subtextColor: '#82b5a6', subtextColorLight: null,
+    priceColor: '#34d399',
+    buttonGradient: 'linear-gradient(135deg,#10b981,#06b6d4)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 8px 28px rgba(6,182,212,0.12)',
+    headerBg: 'rgba(7,21,26,0.94)', headerBgLight: null,
+    inherentlyDark: true,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#34d399',
+    hero3d: { stage: 'radial-gradient(100% 80% at 30% 20%,#0f5c57 0%,#0a2f3a 55%,#061219 100%)', accent: '#5eead4', rim: '#34d399', ink: '#e6fff6', muted: '#8fc9b8', chip: 'rgba(255,255,255,0.12)' },
+  },
+
+  /* Onyx : noir et rouge, éditorial */
+  onyx: {
+    pageBg: '#0c0c0e', pageBgLight: null,
+    cardBg: '#16161a', cardBgLight: null,
+    cardBorder: 'rgba(255,255,255,0.09)', cardBorderLight: null,
+    textColor: '#f5f5f7', textColorLight: null,
+    subtextColor: '#9a9aa5', subtextColorLight: null,
+    priceColor: '#ff4457',
+    buttonGradient: 'linear-gradient(135deg,#e11d48,#ff4457)',
+    imageRadius: 'rounded-xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-2xl', cardShadow: '0 10px 30px rgba(0,0,0,0.5)',
+    headerBg: 'rgba(12,12,14,0.95)', headerBgLight: null,
+    inherentlyDark: true,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#ff4457',
+    hero3d: { stage: 'radial-gradient(90% 70% at 70% 30%,#3a1018 0%,#16090c 55%,#0a0a0c 100%)', accent: '#ff4457', rim: '#ff7a88', ink: '#f5f5f7', muted: '#a8a8b3', chip: 'rgba(255,255,255,0.1)' },
+  },
+
+  /* Lagon : bleu clair et frais */
+  lagoon: {
+    pageBg: '#0a1626', pageBgLight: '#eef7ff',
+    cardBg: '#112239', cardBgLight: '#ffffff',
+    cardBorder: 'rgba(56,189,248,0.22)', cardBorderLight: 'rgba(14,116,184,0.14)',
+    textColor: '#e8f4ff', textColorLight: '#0b2540',
+    subtextColor: '#8fb2d1', subtextColorLight: '#5b7a96',
+    priceColor: '#0ea5e9',
+    buttonGradient: 'linear-gradient(135deg,#0ea5e9,#6366f1)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 8px 26px rgba(14,165,233,0.12)',
+    headerBg: 'rgba(10,22,38,0.95)', headerBgLight: 'rgba(238,247,255,0.95)',
+    inherentlyDark: false,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#0ea5e9',
+    hero3d: { stage: 'linear-gradient(165deg,#bde6ff 0%,#6cc3ff 50%,#4f7cff 100%)', accent: '#1e3a8a', rim: '#ffffff', ink: '#06213f', muted: 'rgba(6,33,63,0.7)', chip: 'rgba(255,255,255,0.35)' },
+  },
+
+  /* Cinéma : scène plein cadre, le défilement pilote l'animation 3D (teal et orange, comme au cinéma) */
+  cinema: {
+    pageBg: '#06080c', pageBgLight: null,
+    cardBg: '#0e1218', cardBgLight: null,
+    cardBorder: 'rgba(255,255,255,0.08)', cardBorderLight: null,
+    textColor: '#f4f7fa', textColorLight: null,
+    subtextColor: '#8fa3b0', subtextColorLight: null,
+    priceColor: '#ff9a5c',
+    buttonGradient: 'linear-gradient(135deg,#ff7a3d,#ff3d77)',
+    imageRadius: 'rounded-2xl', gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    cardRadius: 'rounded-3xl', cardShadow: '0 12px 36px rgba(0,0,0,0.55)',
+    headerBg: 'rgba(6,8,12,0.88)', headerBgLight: null,
+    inherentlyDark: true,
+    hasCardDecoration: null, cartButtonStyle: 'below', headerStyle: 'default', priceStyle: 'inline',
+    accentColor: '#ff7a3d',
+    heroMode: 'scroll',
+    hero3d: { stage: 'radial-gradient(90% 75% at 50% 35%,#103846 0%,#07131a 58%,#04070a 100%)', accent: '#ff7a3d', rim: '#3dd6ff', ink: '#f4f7fa', muted: '#8fa3b0', chip: 'rgba(255,255,255,0.14)' },
+  },
+
 };
 
 export const THEMES = [
@@ -347,6 +496,13 @@ export const THEMES = [
   { id: 'vintage',     label: { fr: 'Vintage',     en: 'Vintage' },     bg: 'bg-[#f5efe4]',    text: 'text-[#3d2b1a]',       accent: 'bg-[#8b5a2b]', free: false, premium: false, hasBg: false },
   { id: 'marketplace', label: { fr: 'Marketplace', en: 'Marketplace' }, bg: 'bg-[#f0f2f5]',    text: 'text-gray-900',        accent: 'bg-[#1877f2]', free: false, premium: false, hasBg: false },
   { id: 'nature',      label: { fr: 'Nature',      en: 'Nature' },      bg: 'bg-[#f4f1eb]',    text: 'text-[#2c3e2c]',       accent: 'bg-[#4c6f40]', free: false, premium: false, hasBg: false },
+  { id: 'studio',      label: { fr: 'Studio',      en: 'Studio' },      bg: 'bg-[#e9ebf2]',    text: 'text-gray-900',        accent: 'bg-[#4f46e5]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'neon',        label: { fr: 'Néon',        en: 'Neon' },        bg: 'bg-[#120a38]',    text: 'text-white',           accent: 'bg-[#22e4ff]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'sunset',      label: { fr: 'Coucher de soleil', en: 'Sunset' }, bg: 'bg-[#ff6f61]',   text: 'text-white',           accent: 'bg-[#ffb36b]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'aurora',      label: { fr: 'Aurore',      en: 'Aurora' },      bg: 'bg-[#0a2f3a]',    text: 'text-white',           accent: 'bg-[#34d399]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'onyx',        label: { fr: 'Onyx',        en: 'Onyx' },        bg: 'bg-[#16090c]',    text: 'text-white',           accent: 'bg-[#ff4457]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'lagoon',      label: { fr: 'Lagon',       en: 'Lagoon' },      bg: 'bg-[#6cc3ff]',    text: 'text-[#06213f]',       accent: 'bg-[#4f7cff]', free: false, premium: true, hasBg: false, hero3d: true },
+  { id: 'cinema',      label: { fr: 'Cinéma',      en: 'Cinema' },      bg: 'bg-[#07131a]',    text: 'text-white',           accent: 'bg-[#ff7a3d]', free: false, premium: true,  hasBg: false, hero3d: true },
 ];
 
 export const SOCIAL_PLATFORMS = [

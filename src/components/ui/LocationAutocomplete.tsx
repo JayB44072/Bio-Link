@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { MapPin, LocateFixed, Loader2 } from 'lucide-react';
+import { GRADIENTS } from '../../lib/theme';
+import { dashPalette } from '../../lib/dashPalette';
 
 export interface LocationValue {
   address: string;
@@ -30,6 +32,7 @@ interface LocationAutocompleteProps {
 export default function LocationAutocomplete({
   value, onChange, placeholder, isDark: dk = false, label, myLocationLabel,
 }: LocationAutocompleteProps) {
+  const inputId = useId();
   const [query, setQuery] = useState(value.address || '');
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -98,20 +101,16 @@ export default function LocationAutocomplete({
     }, () => setLocating(false), { enableHighAccuracy: true, timeout: 10000 });
   }
 
-  const inputBg     = dk ? '#0d0d22' : '#faf9ff';
-  const inputBorder = dk ? 'rgba(139,124,255,0.18)' : '#e6e1fb';
-  const txtPrim     = dk ? '#f2f1ff' : '#16162e';
-  const txtSub      = dk ? '#8c8ab0' : '#8a87a3';
-  const surface     = dk ? '#12122b' : '#ffffff';
+  const { inputBg, inputBorder, txtPrim, txtSub, surface, txtLabel } = dashPalette(dk);
 
   return (
     <div ref={boxRef} className="relative">
-      {label && <label className="block text-sm font-semibold mb-1.5" style={{ color: dk ? '#c7c5e8' : '#2d2b45' }}>{label}</label>}
+      {label && <label htmlFor={inputId} className="block text-sm font-semibold mb-1.5" style={{ color: txtLabel }}>{label}</label>}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: txtSub }} />
           <input
-            type="text" value={query}
+            id={inputId} type="text" value={query}
             onChange={e => handleQueryChange(e.target.value)}
             onFocus={() => suggestions.length > 0 && setOpen(true)}
             placeholder={placeholder}
@@ -123,7 +122,7 @@ export default function LocationAutocomplete({
         <button type="button" onClick={useMyLocation} disabled={locating}
           title={myLocationLabel}
           className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg,#6C63FF,#00C2FF)' }}>
+          style={{ background: GRADIENTS.brand }}>
           {locating ? <Loader2 size={16} className="text-white animate-spin" /> : <LocateFixed size={16} className="text-white" />}
         </button>
       </div>

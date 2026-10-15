@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Profile, Product, ProductReview } from '../../lib/types';
 import { useLang } from '../../lib/LanguageContext';
 import { useAppPrefs } from '../../lib/AppPrefsContext';
-import { SHOP_THEMES, ShopThemeConfig } from '../../lib/planLimits';
+import type { ShopThemeConfig } from '../../lib/planLimits';
+import { resolveShopTheme } from '../../lib/shopTheme';
 import { supabase } from '../../lib/supabase';
 import { weightedRating } from '../../lib/ratingUtils';
+import { BRAND } from '../../lib/theme';
 import {
   ArrowLeft, ArrowLeft as PrevIcon, ArrowRight as NextIcon, ShoppingBag, ShoppingCart, Star, Store,
   ShieldCheck, Check, Package, Truck, RotateCcw, Lock, CreditCard, MessageSquareText, Eye,
@@ -28,7 +30,7 @@ export default function ProductDetailPage({
 }: ProductDetailPageProps) {
   const { lang } = useLang();
   const { isDark: dk } = useAppPrefs();
-  const shopTheme: ShopThemeConfig = SHOP_THEMES[seller.theme ?? 'default'] ?? SHOP_THEMES.default;
+  const shopTheme: ShopThemeConfig = resolveShopTheme(seller.theme).config;
   const themeDark = shopTheme.inherentlyDark ? true : (shopTheme.pageBgLight === null ? false : dk);
   const pick = (dark: string, light: string | null) => light === null ? dark : (themeDark ? dark : light);
   const stPageBg = pick(shopTheme.pageBg, shopTheme.pageBgLight);
@@ -160,7 +162,7 @@ export default function ProductDetailPage({
                 {gallery.map((img, i) => (
                   <button key={i} onClick={() => setActiveImg(i)}
                     className="aspect-square rounded-xl overflow-hidden border-2 transition shrink-0"
-                    style={{ borderColor: activeImg === i ? '#6C63FF' : stCardBorder }}>
+                    style={{ borderColor: activeImg === i ? BRAND.violet : stCardBorder }}>
                     <img src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -168,7 +170,7 @@ export default function ProductDetailPage({
             )}
 
             <div className="relative flex-1 aspect-square rounded-2xl overflow-hidden flex items-center justify-center"
-              style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
+              style={{ background: themeDark ? BRAND.navy : '#f3f4f6' }}>
               {gallery[activeImg] ? (
                 <img src={gallery[activeImg]} alt={product.name} className="w-full h-full object-cover" />
               ) : (
@@ -245,11 +247,11 @@ export default function ProductDetailPage({
             {/* Vendeur */}
             <div className="rounded-2xl border p-4 flex items-center gap-3 mb-6" style={{ borderColor: stCardBorder }}>
               <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-                style={{ background: themeDark ? '#1a1a2e' : '#f3f4f6' }}>
+                style={{ background: themeDark ? BRAND.navy : '#f3f4f6' }}>
                 {seller.shop_logo_url ? (
                   <img src={seller.shop_logo_url} alt={shopDisplayName} className="w-full h-full object-cover" />
                 ) : isFree ? (
-                  <img src="/logo.png" alt="BioLinkWD" className="w-full h-full object-contain p-1.5"
+                  <img src="/logo-sm.png" alt="BioLinkWD" className="w-full h-full object-contain p-1.5"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
                   <Store size={20} style={{ color: stSubtext }} />
@@ -340,7 +342,7 @@ export default function ProductDetailPage({
               {loadingReviews ? (
                 <div className="py-6 flex justify-center">
                   <div className="w-5 h-5 border-2 rounded-full animate-spin"
-                    style={{ borderColor: stCardBorder, borderTopColor: '#6C63FF' }} />
+                    style={{ borderColor: stCardBorder, borderTopColor: BRAND.violet }} />
                 </div>
               ) : reviews.length === 0 ? (
                 <p className="text-xs py-2" style={{ color: stSubtext }}>
@@ -381,8 +383,8 @@ export default function ProductDetailPage({
               <button onClick={handleAddToCart} disabled={outOfStock || !interactive}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
-                  borderColor: shopTheme.accentColor ?? '#6C63FF',
-                  color: added ? '#fff' : (shopTheme.accentColor ?? '#6C63FF'),
+                  borderColor: shopTheme.accentColor ?? BRAND.violet,
+                  color: added ? '#fff' : (shopTheme.accentColor ?? BRAND.violet),
                   background: added ? '#22c55e' : 'transparent',
                 }}>
                 {added ? <Check size={15} /> : <ShoppingCart size={15} />}

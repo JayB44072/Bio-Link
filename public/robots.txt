@@ -1,8 +1,10 @@
 User-agent: *
 Allow: /
 
-# Ne pas indexer les pages internes
+# Pages personnelles : jamais indexées
 Disallow: /commande/
 Disallow: /suivi
+Disallow: /desabonnement/
+Disallow: /preferences-email/
 
 Sitemap: https://biolinkwd.duckdns.org/sitemap.xml
