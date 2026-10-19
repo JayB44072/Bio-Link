@@ -71,7 +71,11 @@ export default function Dashboard() {
   const [profile, setProfile]     = useState<Profile | null>(null);
   const [products, setProducts]   = useState<Product[]>([]);
   const [services, setServices]   = useState<Service[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>('biolink');
+  // Mode démo uniquement : `?tab=orders` ouvre directement un onglet (captures d'écran)
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const wanted = import.meta.env.VITE_DEMO ? new URLSearchParams(window.location.search).get('tab') : null;
+    return (TABS.find(tb => tb.id === wanted)?.id ?? 'biolink') as TabId;
+  });
   const [loading, setLoading]     = useState(true);
   const [sideOpen, setSideOpen]   = useState(false);
   const [sideCollapsed, setSideCollapsed] = useState<boolean>(() => {

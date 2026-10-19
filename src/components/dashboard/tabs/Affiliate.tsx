@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { appOrigin } from '../../../lib/appOrigin';
 import { Profile, AffiliateCommission } from '../../../lib/types';
 import { useLang } from '../../../lib/LanguageContext';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
@@ -153,7 +154,7 @@ export default function Affiliate({ profile, onUpdate }: AffiliateProps) {
   const lifetimeEarned = Number(profile.lifetime_affiliate_earned ?? 0);
 
   const referralLink = useMemo(() => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://biolink-wd.onrender.com';
+    const origin = typeof window !== 'undefined' ? appOrigin() : 'https://biolink-wd.onrender.com';
     return referralCode ? `${origin}?ref=${referralCode}` : origin;
   }, [referralCode]);
 

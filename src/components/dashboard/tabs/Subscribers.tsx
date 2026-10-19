@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { appOrigin } from '../../../lib/appOrigin';
 import { BellRing, Download, Mail, Search, Send, Trash2, UserCheck, UserMinus, Users, X } from 'lucide-react';
 import type { Profile } from '../../../lib/types';
 import { useLang } from '../../../lib/LanguageContext';
@@ -47,7 +48,7 @@ export default function Subscribers({ profile }: SubscribersProps) {
   }, [subs, query]);
 
   const palette = { surface, border, txtPrim, txtSub, shadow: cardShadow };
-  const publicUrl = `${window.location.origin}/u/${profile.username}`;
+  const publicUrl = `${appOrigin()}/u/${profile.username}`;
 
   function exportCsv() {
     const blob = new Blob([subscribersToCsv(subs)], { type: 'text/csv;charset=utf-8' });

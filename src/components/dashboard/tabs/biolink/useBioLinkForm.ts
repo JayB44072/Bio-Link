@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { appOrigin } from '../../../../lib/appOrigin';
 import type { Profile, SocialLink } from '../../../../lib/types';
 import { PLAN_CONFIGS, SOCIAL_PLATFORMS } from '../../../../lib/planLimits';
 import { updateProfile } from '../../../../lib/api/profiles';
@@ -67,7 +68,7 @@ export function useBioLinkForm(profile: Profile, onUpdate: (p: Partial<Profile>)
   const canUseLogo    = plan.shop_logo;
   const maxSocial     = plan.max_social_links;
   const atSocialLimit = maxSocial !== null && form.social_links.length >= maxSocial;
-  const publicUrl     = `${window.location.origin}/u/${profile.username}`;
+  const publicUrl     = `${appOrigin()}/u/${profile.username}`;
 
   function setField(key: string, value: unknown) {
     setForm(prev => ({ ...prev, [key]: value }));

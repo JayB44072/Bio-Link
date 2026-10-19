@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { appOrigin } from '../../../lib/appOrigin';
 import QRCode from 'qrcode';
 import { Profile } from '../../../lib/types';
 import { useAppPrefs } from '../../../lib/AppPrefsContext';
@@ -171,7 +172,7 @@ export default function QrCodeTab({ profile }: QrCodeTabProps) {
   const cardShadow = dk ? 'none' : '0 6px 24px rgba(108,99,255,0.08)';
 
   const publicUrl = useMemo(
-    () => `${window.location.origin}/u/${profile.username}`,
+    () => `${appOrigin()}/u/${profile.username}`,
     [profile.username]
   );
 

@@ -167,6 +167,14 @@ export default function PublicProfileView({ profile, products, services, interac
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [checkoutItem, setCheckoutItem] = useState<Product | null>(null);
   const [checkoutSource, setCheckoutSource] = useState<'buyNow' | 'cart' | null>(null);
+
+  // Mode démo uniquement : `?buy=<id produit>` ouvre directement le paiement (captures d'écran de présentation)
+  useEffect(() => {
+    if (!import.meta.env.VITE_DEMO) return;
+    const wanted = new URLSearchParams(window.location.search).get('buy');
+    const found = wanted ? products.find(p => p.id === wanted) : undefined;
+    if (found) { setCheckoutItem(found); setCheckoutSource('buyNow'); }
+  }, [products]);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [viewingService, setViewingService] = useState<Service | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
